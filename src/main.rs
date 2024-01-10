@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, io::Write};
+use std::collections::VecDeque;
 
 use bitcoin::{opcodes::all::OP_IF, script::Instruction, Transaction, TxIn};
 
@@ -6,20 +6,13 @@ fn main() -> anyhow::Result<()> {
     let rawtx = std::fs::read_to_string("./tx.txt")?;
     let rawtx = hex::decode(&rawtx)?;
     let tx: Transaction = bitcoin::consensus::deserialize(&rawtx[..])?;
-    let output_file = format!("{}.png", tx.txid());
-    println!("Transaction deserialized");
 
     for txin in tx.input {
         let inscription = extract_inscription(txin);
-        println!("{inscription:?}");
 
         if let Some((_mime_type, bytes)) = inscription {
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(&output_file)?;
-            file.write_all(&bytes)?;
+            let imgfmt = image::load_from_memory(&bytes)?;
+            viuer::print(&imgfmt, &viuer::Config::default())?;
         }
     }
     Ok(())
