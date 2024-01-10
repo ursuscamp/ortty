@@ -1,24 +1,42 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, str::FromStr};
 
-use bitcoin::{opcodes::all::OP_IF, script::Instruction, Transaction, TxIn};
+use anyhow::anyhow;
+use bitcoin::{opcodes::all::OP_IF, script::Instruction, BlockHash, Transaction, TxIn, Txid};
+use bitcoincore_rpc::RpcApi;
+use clap::Parser;
+
+use crate::args::Args;
+
+mod args;
 
 fn main() -> anyhow::Result<()> {
-    let rawtx = std::fs::read_to_string("./tx.txt")?;
-    let rawtx = hex::decode(&rawtx)?;
-    let tx: Transaction = bitcoin::consensus::deserialize(&rawtx[..])?;
+    dotenv::dotenv()?;
 
-    for txin in tx.input {
-        let inscription = extract_inscription(txin);
+    let args = Args::parse();
 
-        if let Some((_mime_type, bytes)) = inscription {
-            let imgfmt = image::load_from_memory(&bytes)?;
-            viuer::print(&imgfmt, &viuer::Config::default())?;
-        }
+    let tx = load_tx(&args)?;
+    let input = args.input.unwrap_or_default();
+    let txin = tx
+        .input
+        .get(input)
+        .ok_or_else(|| anyhow!("Invalid input"))?;
+    let inscription = extract_inscription(txin);
+
+    if let Some((_mime_type, bytes)) = inscription {
+        let imgfmt = image::load_from_memory(&bytes)?;
+        viuer::print(&imgfmt, &viuer::Config::default())?;
     }
     Ok(())
 }
 
-fn extract_inscription(txin: TxIn) -> Option<(String, Vec<u8>)> {
+fn load_tx(args: &Args) -> anyhow::Result<Transaction> {
+    let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth())?;
+    let txid = args.tx.clone().ok_or_else(|| anyhow!("Missing txid"))?;
+    let tx = rpc.get_raw_transaction(&txid, args.block.as_ref())?;
+    Ok(tx)
+}
+
+fn extract_inscription(txin: &TxIn) -> Option<(String, Vec<u8>)> {
     let mime_type;
     let bytes;
     let tapscript = txin.witness.tapscript()?;
