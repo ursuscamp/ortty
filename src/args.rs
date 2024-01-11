@@ -56,7 +56,7 @@ impl Args {
         let mode = match m {
             (true, true, true) => ScanMode::Input,
             (true, true, false) => ScanMode::Transaction,
-            (true, false, true) => ScanMode::Block,
+            (true, false, false) => ScanMode::Block,
             _ => {
                 return Err(anyhow!(
                     "Scan mode requires: Block, Block+Transaction, Block+Transaction+Input"
