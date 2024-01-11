@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, str::FromStr};
 
 use bitcoin::{opcodes::all::OP_IF, script::Instruction, TxIn};
+use colored_json::{to_colored_json, ColorMode};
 use mime::Mime;
 
 pub struct Inscription {
@@ -25,6 +26,17 @@ impl Inscription {
                 ..Default::default()
             };
             viuer::print(&img, &config)?;
+        } else if self.mime.type_() == "text" {
+            // If the text is parseable as JSON, then parse it, colorize and output it.
+            // Otherwise, output as plain text.
+            let s = std::str::from_utf8(&self.data)?;
+            match serde_json::from_str::<serde_json::Value>(s) {
+                Ok(value) => {
+                    let formatted = to_colored_json(&value, ColorMode::On)?;
+                    println!("{formatted}");
+                }
+                Err(_) => println!("{s}"),
+            }
         }
 
         Ok(())
