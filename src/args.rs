@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use anyhow::anyhow;
 use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::Auth;
 
@@ -34,6 +35,7 @@ impl Args {
             None => "localhost".into(),
         }
     }
+
     pub fn rpc_auth(&self) -> Auth {
         if let Some(cookie) = &self.cookie {
             Auth::CookieFile(cookie.clone())
@@ -44,4 +46,29 @@ impl Args {
             )
         }
     }
+
+    pub fn scan_mode(&self) -> anyhow::Result<ScanMode> {
+        let m = (
+            self.block.is_some(),
+            self.tx.is_some(),
+            self.input.is_some(),
+        );
+        let mode = match m {
+            (true, true, true) => ScanMode::Input,
+            (true, true, false) => ScanMode::Transaction,
+            (true, false, true) => ScanMode::Block,
+            _ => {
+                return Err(anyhow!(
+                    "Scan mode requires: Block, Block+Transaction, Block+Transaction+Input"
+                ))
+            }
+        };
+        Ok(mode)
+    }
+}
+
+pub enum ScanMode {
+    Block,
+    Transaction,
+    Input,
 }
