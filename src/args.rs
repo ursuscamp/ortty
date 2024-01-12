@@ -5,6 +5,8 @@ use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::Auth;
 use directories::BaseDirs;
 
+use crate::filter::Filter;
+
 #[derive(clap::Parser, Debug)]
 pub struct Args {
     /// Host name/IP address of Bitcoin full node
@@ -71,18 +73,20 @@ impl Args {
     }
 
     pub fn scan_mode(&self) -> anyhow::Result<ScanMode> {
-        let mode = match self.command {
-            Commands::ScanBlock { block } => ScanMode::Block(block),
+        let mode = match &self.command {
+            Commands::ScanBlock { block, filter } => ScanMode::Block(*block, filter.clone()),
             Commands::ScanTx {
                 tx,
                 block,
                 input: Some(input),
-            } => ScanMode::Input(input, tx, block),
+                filter: _filter,
+            } => ScanMode::Input(*input, *tx, *block),
             Commands::ScanTx {
                 tx,
                 block,
                 input: _input,
-            } => ScanMode::Transaction(tx, block),
+                filter,
+            } => ScanMode::Transaction(*tx, *block, filter.clone()),
         };
         Ok(mode)
     }
@@ -94,6 +98,10 @@ pub enum Commands {
     ScanBlock {
         /// Blockhash to scan
         block: BlockHash,
+
+        /// Filter inscriptions by type [text, json, brc20, image]
+        #[arg(long)]
+        filter: Vec<Filter>,
     },
     /// Scan a transaction and print/extract every recognizable Inscription
     ScanTx {
@@ -106,11 +114,15 @@ pub enum Commands {
         /// Optional input to scan (default to all inputs)
         #[arg(long)]
         input: Option<usize>,
+
+        /// Filter inscriptions by type [text, json, brc20, image]
+        #[arg(long)]
+        filter: Vec<Filter>,
     },
 }
 
 pub enum ScanMode {
-    Block(BlockHash),
-    Transaction(Txid, Option<BlockHash>),
+    Block(BlockHash, Vec<Filter>),
+    Transaction(Txid, Option<BlockHash>, Vec<Filter>),
     Input(usize, Txid, Option<BlockHash>),
 }

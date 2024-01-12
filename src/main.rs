@@ -3,6 +3,7 @@ use clap::Parser;
 use crate::args::Args;
 
 mod args;
+mod filter;
 mod inscription;
 mod scan;
 
