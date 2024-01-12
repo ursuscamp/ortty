@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::RpcApi;
 
 use crate::{
@@ -8,16 +9,15 @@ use crate::{
 
 pub fn scan(args: &Args) -> anyhow::Result<Vec<Inscription>> {
     match args.scan_mode()? {
-        ScanMode::Block => scan_block(args),
-        ScanMode::Transaction => scan_transaction(args),
-        ScanMode::Input => scan_input(args),
+        ScanMode::Block(block) => scan_block(args, &block),
+        ScanMode::Transaction(txid, block) => scan_transaction(args, &txid, &block),
+        ScanMode::Input(input, txid, block) => scan_input(args, input, &txid, &block),
     }
 }
 
-fn scan_block(args: &Args) -> anyhow::Result<Vec<Inscription>> {
+fn scan_block(args: &Args, block: &BlockHash) -> anyhow::Result<Vec<Inscription>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth())?;
-    let blockhash = args.block.expect("Blockhash validation error");
-    let block = rpc.get_block(&blockhash)?;
+    let block = rpc.get_block(block)?;
     let mut inscriptions = Vec::new();
     for tx in block.txdata {
         for input in tx.input {
@@ -29,10 +29,13 @@ fn scan_block(args: &Args) -> anyhow::Result<Vec<Inscription>> {
     Ok(inscriptions)
 }
 
-fn scan_transaction(args: &Args) -> anyhow::Result<Vec<Inscription>> {
+fn scan_transaction(
+    args: &Args,
+    txid: &Txid,
+    block: &Option<BlockHash>,
+) -> anyhow::Result<Vec<Inscription>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth())?;
-    let txid = args.tx.expect("Txid validation error");
-    let tx = rpc.get_raw_transaction(&txid, args.block.as_ref())?;
+    let tx = rpc.get_raw_transaction(&txid, block.as_ref())?;
     let inscriptions: anyhow::Result<Vec<Option<Inscription>>> = tx
         .input
         .iter()
@@ -46,11 +49,14 @@ fn scan_transaction(args: &Args) -> anyhow::Result<Vec<Inscription>> {
     Ok(inscriptions)
 }
 
-fn scan_input(args: &Args) -> anyhow::Result<Vec<Inscription>> {
+fn scan_input(
+    args: &Args,
+    input: usize,
+    txid: &Txid,
+    blockhash: &Option<BlockHash>,
+) -> anyhow::Result<Vec<Inscription>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth())?;
-    let txid = args.tx.expect("Txid validation error");
-    let tx = rpc.get_raw_transaction(&txid, args.block.as_ref())?;
-    let input = args.input.expect("Input validation error");
+    let tx = rpc.get_raw_transaction(&txid, blockhash.as_ref())?;
     let txin = tx
         .input
         .get(input)
