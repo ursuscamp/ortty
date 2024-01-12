@@ -16,7 +16,7 @@ pub fn scan(args: &Args) -> anyhow::Result<Vec<Inscription>> {
 }
 
 fn scan_block(args: &Args, block: &BlockHash) -> anyhow::Result<Vec<Inscription>> {
-    let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth())?;
+    let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let block = rpc.get_block(block)?;
     let mut inscriptions = Vec::new();
     for tx in block.txdata {
@@ -34,7 +34,7 @@ fn scan_transaction(
     txid: &Txid,
     block: &Option<BlockHash>,
 ) -> anyhow::Result<Vec<Inscription>> {
-    let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth())?;
+    let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let tx = rpc.get_raw_transaction(&txid, block.as_ref())?;
     let inscriptions: anyhow::Result<Vec<Option<Inscription>>> = tx
         .input
@@ -55,7 +55,7 @@ fn scan_input(
     txid: &Txid,
     blockhash: &Option<BlockHash>,
 ) -> anyhow::Result<Vec<Inscription>> {
-    let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth())?;
+    let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let tx = rpc.get_raw_transaction(&txid, blockhash.as_ref())?;
     let txin = tx
         .input

@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
+use anyhow::anyhow;
 use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::Auth;
+use directories::BaseDirs;
 
 #[derive(clap::Parser, Debug)]
 pub struct Args {
@@ -17,7 +19,7 @@ pub struct Args {
     #[arg(long, env = "BITCOIN_PASS")]
     pub password: Option<String>,
 
-    /// Path to RPC cookie file (if applicable)
+    /// Path to RPC cookie file (if applicable). Searches known folders by default
     #[arg(long, env = "BITCOIN_COOKIE")]
     pub cookie: Option<PathBuf>,
 
@@ -26,6 +28,19 @@ pub struct Args {
 }
 
 impl Args {
+    pub fn find_cookie(&self) -> Option<PathBuf> {
+        if let Some(bd) = BaseDirs::new() {
+            let paths = [
+                bd.home_dir().join(".bitcoin").join("cookie"),
+                bd.config_dir().join("bitcoin").join("cookie"),
+                bd.config_local_dir().join("bitcoin").join("cookie"),
+                bd.data_dir().join("bitcoin").join("cookie"),
+            ];
+            return paths.into_iter().find(|p| p.exists());
+        }
+        None
+    }
+
     pub fn rpc_host(&self) -> String {
         match &self.host {
             Some(host) => host.clone(),
@@ -33,15 +48,26 @@ impl Args {
         }
     }
 
-    pub fn rpc_auth(&self) -> Auth {
-        if let Some(cookie) = &self.cookie {
+    pub fn rpc_auth(&self) -> anyhow::Result<Auth> {
+        // Auth order:
+        // 1. If cookie is specified, use it
+        // 2. If username AND password are specified, use them
+        // 3. Search for cookies in default folders
+        // 4. Raise authentication error for nothing found
+        let auth = if let Some(cookie) = &self.cookie {
             Auth::CookieFile(cookie.clone())
-        } else {
+        } else if self.user.is_some() && self.password.is_some() {
             Auth::UserPass(
                 self.user.clone().unwrap_or_default(),
                 self.password.clone().unwrap_or_default(),
             )
-        }
+        } else if let Some(cookie) = self.find_cookie() {
+            Auth::CookieFile(cookie)
+        } else {
+            return Err(anyhow!("Missing RPC auth info"));
+        };
+
+        Ok(auth)
     }
 
     pub fn scan_mode(&self) -> anyhow::Result<ScanMode> {

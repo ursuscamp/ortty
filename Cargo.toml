@@ -11,6 +11,7 @@ bitcoin = { version = "0.31.0", features = ["base64", "rand", "serde"] }
 bitcoincore-rpc = "0.18.0"
 clap = { version = "4.4.14", features = ["derive", "env"] }
 colored_json = "4.1.0"
+directories = "5.0.1"
 dotenv = "0.15.0"
 hex = { version = "0.4.3", features = ["serde"] }
 image = "0.24.7"
