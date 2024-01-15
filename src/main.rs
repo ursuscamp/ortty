@@ -1,3 +1,4 @@
+use anyhow::bail;
 use clap::Parser;
 
 use crate::args::Args;
@@ -14,7 +15,21 @@ fn main() -> anyhow::Result<()> {
 
     let inscriptions = scan::scan(&args)?;
     for inscription in inscriptions {
-        inscription.print()?;
+        if let Some(extract) = args.extract() {
+            if !extract.is_dir() {
+                bail!("Extract must be a folder");
+            }
+            let fname = format!(
+                "{}.{}",
+                inscription.inscription_id(),
+                inscription.file_extension()
+            );
+            let path = extract.join(fname);
+            println!("Writing {}...", path.to_str().unwrap_or_default());
+            inscription.write_to_file(&path)?;
+        } else {
+            inscription.print()?;
+        }
     }
     Ok(())
 }

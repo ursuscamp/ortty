@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::RpcApi;
 
@@ -26,9 +25,9 @@ fn scan_block(
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let block = rpc.get_block(block)?;
     let mut inscriptions = Vec::new();
-    for tx in block.txdata {
-        for input in tx.input {
-            if let Some(inscription) = Inscription::extract_witness(&input)? {
+    for tx in &block.txdata {
+        for (input, _) in tx.input.iter().enumerate() {
+            if let Some(inscription) = Inscription::extract_witness(&tx, input)? {
                 // If any filters are specified, check if the inscription matches a filter and add it
                 // If no filters are specified, it automatically matches
                 if filters.len() > 0 {
@@ -55,7 +54,8 @@ fn scan_transaction(
     let inscriptions: anyhow::Result<Vec<Option<Inscription>>> = tx
         .input
         .iter()
-        .map(|txin| Inscription::extract_witness(txin))
+        .enumerate()
+        .map(|(input, _)| Inscription::extract_witness(&tx, input))
         .collect();
     let inscriptions: Vec<Inscription> = inscriptions?
         .into_iter()
@@ -82,11 +82,7 @@ fn scan_input(
 ) -> anyhow::Result<Vec<Inscription>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let tx = rpc.get_raw_transaction(&txid, blockhash.as_ref())?;
-    let txin = tx
-        .input
-        .get(input)
-        .ok_or_else(|| anyhow!("Missing input"))?;
-    let inscription = Inscription::extract_witness(txin)?;
+    let inscription = Inscription::extract_witness(&tx, input)?;
     if let Some(inscription) = inscription {
         return Ok(vec![inscription]);
     }

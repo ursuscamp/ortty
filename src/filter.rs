@@ -14,18 +14,11 @@ pub enum Filter {
 
 impl Filter {
     pub fn inscription(&self, inscription: &Inscription) -> bool {
-        let text = std::str::from_utf8(&inscription.data).ok();
-        let json: Option<serde_json::Value> = text.map(|s| serde_json::from_str(s).ok()).flatten();
-        let brc20 = json
-            .as_ref()
-            .map(|v| v.get("p").map(|s| s == "brc-20"))
-            .flatten()
-            .unwrap_or_default();
         match self {
-            Filter::Text => text.is_some(),
-            Filter::Json => json.is_some(),
-            Filter::Brc20 => brc20,
-            Filter::Image => inscription.mime.type_() == "image",
+            Filter::Text => inscription.parsed.is_text(),
+            Filter::Json => inscription.parsed.is_json(),
+            Filter::Brc20 => inscription.parsed.is_brc20(),
+            Filter::Image => inscription.parsed.is_image(),
         }
     }
 }

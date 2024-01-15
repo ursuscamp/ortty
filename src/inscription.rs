@@ -1,45 +1,111 @@
-use std::{collections::VecDeque, str::FromStr};
+use anyhow::anyhow;
+use image::{DynamicImage, EncodableLayout, ImageFormat};
+use std::{collections::VecDeque, ops::Deref, path::PathBuf};
 
-use bitcoin::{opcodes::all::OP_IF, script::Instruction, TxIn};
+use bitcoin::{opcodes::all::OP_IF, script::Instruction, Transaction, TxIn, Txid};
 use colored_json::{to_colored_json, ColorMode};
-use mime::Mime;
+
+pub enum ParsedData {
+    Binary,
+    Html(String),
+    Image(DynamicImage),
+    Json(serde_json::Value),
+    Text(String),
+}
+
+impl ParsedData {
+    pub fn is_brc20(&self) -> bool {
+        match self {
+            ParsedData::Json(json) => {
+                json.get("p").unwrap_or_else(|| &serde_json::Value::Null) == "brc-20"
+            }
+            _ => false,
+        }
+    }
+
+    pub fn is_text(&self) -> bool {
+        match self {
+            ParsedData::Html(_) | ParsedData::Json(_) | ParsedData::Text(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_json(&self) -> bool {
+        match self {
+            ParsedData::Json(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_image(&self) -> bool {
+        match self {
+            ParsedData::Image(_) => true,
+            _ => false,
+        }
+    }
+}
 
 pub struct Inscription {
-    pub mime: Mime,
+    pub txid: Txid,
+    pub input: usize,
+    pub mime: String,
     pub data: Vec<u8>,
+    pub parsed: ParsedData,
 }
 
 impl Inscription {
-    pub fn extract_witness(input: &TxIn) -> anyhow::Result<Option<Inscription>> {
-        if let Some((mime_type, data)) = extract_inscription(input) {
-            let mime = Mime::from_str(&mime_type)?;
-            return Ok(Some(Inscription { mime, data }));
+    pub fn extract_witness(tx: &Transaction, input: usize) -> anyhow::Result<Option<Inscription>> {
+        let txin = tx
+            .input
+            .get(input)
+            .ok_or_else(|| anyhow!("Missing input"))?;
+        if let Some((mime, data)) = extract_inscription(txin) {
+            let parsed = parse_data(&data, &mime);
+            return Ok(Some(Inscription {
+                txid: tx.txid(),
+                input,
+                mime,
+                data,
+                parsed,
+            }));
         }
         Ok(None)
     }
 
     pub fn print(&self) -> anyhow::Result<()> {
-        if let Ok(img) = image::load_from_memory(&self.data) {
-            let config = viuer::Config {
-                absolute_offset: false,
-                y: 1,
-                ..Default::default()
-            };
-            viuer::print(&img, &config)?;
-        } else if self.mime.type_() == "text" {
-            // If the text is parseable as JSON, then parse it, colorize and output it.
-            // Otherwise, output as plain text.
-            let s = std::str::from_utf8(&self.data)?;
-            match serde_json::from_str::<serde_json::Value>(s) {
-                Ok(value) => {
-                    let formatted = to_colored_json(&value, ColorMode::On)?;
-                    println!("{formatted}");
-                }
-                Err(_) => println!("{s}"),
-            }
+        match &self.parsed {
+            ParsedData::Binary => println!("{}", hex::encode(self.data.as_bytes())),
+            ParsedData::Html(text) | ParsedData::Text(text) => println!("{text}"),
+            ParsedData::Image(image) => print_image(&image)?,
+            ParsedData::Json(value) => print_json(&value)?,
         }
 
         Ok(())
+    }
+
+    pub fn write_to_file(&self, path: &PathBuf) -> anyhow::Result<()> {
+        std::fs::write(path, &self.data)?;
+        Ok(())
+    }
+
+    /// Guess file extension for file based on data heuristic
+    pub fn file_extension(&self) -> String {
+        match self.parsed {
+            ParsedData::Binary => "dat".into(),
+            ParsedData::Html(_) => "html".into(),
+            ParsedData::Image(_) => image::guess_format(&self.data)
+                .map(ImageFormat::extensions_str)
+                .unwrap_or_default()
+                .first()
+                .unwrap_or(&"dat")
+                .to_string(),
+            ParsedData::Json(_) => "json".into(),
+            ParsedData::Text(_) => "txt".into(),
+        }
+    }
+
+    pub fn inscription_id(&self) -> String {
+        format!("{}i{}", self.txid, self.input)
     }
 }
 
@@ -107,4 +173,38 @@ fn extract_data(instructions: &mut VecDeque<Instruction<'_>>, tag: Instruction<'
         }
     }
     data
+}
+
+fn parse_data(data: &[u8], mime: &str) -> ParsedData {
+    if let Ok(text) = std::str::from_utf8(data) {
+        if mime.to_lowercase().contains("html") {
+            return ParsedData::Html(text.into());
+        } else if let Ok(value) = serde_json::from_str(text) {
+            return ParsedData::Json(value);
+        } else {
+            return ParsedData::Text(text.into());
+        }
+    }
+
+    if let Ok(image) = image::load_from_memory(data) {
+        return ParsedData::Image(image);
+    }
+
+    return ParsedData::Binary;
+}
+
+fn print_image(image: &DynamicImage) -> anyhow::Result<()> {
+    let config = viuer::Config {
+        absolute_offset: false,
+        y: 1,
+        ..Default::default()
+    };
+    viuer::print(image, &config)?;
+    Ok(())
+}
+
+fn print_json(value: &serde_json::Value) -> anyhow::Result<()> {
+    let formatted = to_colored_json(value, ColorMode::On)?;
+    println!("{formatted}");
+    Ok(())
 }

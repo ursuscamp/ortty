@@ -74,21 +74,44 @@ impl Args {
 
     pub fn scan_mode(&self) -> anyhow::Result<ScanMode> {
         let mode = match &self.command {
-            Commands::ScanBlock { block, filter } => ScanMode::Block(*block, filter.clone()),
+            Commands::ScanBlock {
+                block,
+                filter,
+                extract: _extract,
+            } => ScanMode::Block(*block, filter.clone()),
             Commands::ScanTx {
                 tx,
                 block,
                 input: Some(input),
                 filter: _filter,
+                extract: _extract,
             } => ScanMode::Input(*input, *tx, *block),
             Commands::ScanTx {
                 tx,
                 block,
                 input: _input,
                 filter,
+                extract: _extract,
             } => ScanMode::Transaction(*tx, *block, filter.clone()),
         };
         Ok(mode)
+    }
+
+    pub fn extract(&self) -> Option<&PathBuf> {
+        match &self.command {
+            Commands::ScanBlock {
+                block: _,
+                filter: _,
+                extract,
+            } => extract.as_ref(),
+            Commands::ScanTx {
+                tx: _,
+                block: _,
+                input: _,
+                filter: _,
+                extract,
+            } => extract.as_ref(),
+        }
     }
 }
 
@@ -102,6 +125,10 @@ pub enum Commands {
         /// Filter inscriptions by type [text, json, brc20, image]
         #[arg(long)]
         filter: Vec<Filter>,
+
+        /// Extract inscriptions to this folder
+        #[arg(long)]
+        extract: Option<PathBuf>,
     },
     /// Scan a transaction and print/extract every recognizable Inscription
     ScanTx {
@@ -118,6 +145,10 @@ pub enum Commands {
         /// Filter inscriptions by type [text, json, brc20, image]
         #[arg(long)]
         filter: Vec<Filter>,
+
+        /// Extract inscriptions to this folder
+        #[arg(long)]
+        extract: Option<PathBuf>,
     },
 }
 
