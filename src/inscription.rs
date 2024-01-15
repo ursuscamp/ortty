@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use image::{DynamicImage, EncodableLayout, ImageFormat};
-use std::{collections::VecDeque, ops::Deref, path::PathBuf};
+use std::{collections::VecDeque, path::PathBuf};
 
 use bitcoin::{opcodes::all::OP_IF, script::Instruction, Transaction, TxIn, Txid};
 use colored_json::{to_colored_json, ColorMode};

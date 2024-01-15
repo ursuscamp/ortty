@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::Auth;
 use directories::BaseDirs;
@@ -74,41 +74,39 @@ impl Args {
 
     pub fn scan_mode(&self) -> anyhow::Result<ScanMode> {
         let mode = match &self.command {
-            Commands::ScanBlock {
-                block,
+            Commands::Scan {
+                block: Some(block),
+                tx: None,
+                input: _,
                 filter,
                 extract: _extract,
             } => ScanMode::Block(*block, filter.clone()),
-            Commands::ScanTx {
-                tx,
+            Commands::Scan {
                 block,
+                tx: Some(txid),
                 input: Some(input),
                 filter: _filter,
                 extract: _extract,
-            } => ScanMode::Input(*input, *tx, *block),
-            Commands::ScanTx {
-                tx,
+            } => ScanMode::Input(*input, *txid, *block),
+            Commands::Scan {
                 block,
+                tx: Some(txid),
                 input: _input,
                 filter,
                 extract: _extract,
-            } => ScanMode::Transaction(*tx, *block, filter.clone()),
+            } => ScanMode::Transaction(*txid, *block, filter.clone()),
+            _ => bail!("Cannot determine scan mode"),
         };
         Ok(mode)
     }
 
     pub fn extract(&self) -> Option<&PathBuf> {
         match &self.command {
-            Commands::ScanBlock {
+            Commands::Scan {
                 block: _,
-                filter: _,
-                extract,
-            } => extract.as_ref(),
-            Commands::ScanTx {
                 tx: _,
-                block: _,
-                input: _,
                 filter: _,
+                input: _,
                 extract,
             } => extract.as_ref(),
         }
@@ -117,26 +115,17 @@ impl Args {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum Commands {
-    /// Scan a full block and print/extract every recognizable Inscription
-    ScanBlock {
-        /// Blockhash to scan
-        block: BlockHash,
-
-        /// Filter inscriptions by type [text, json, brc20, image]
-        #[arg(long)]
-        filter: Vec<Filter>,
-
-        /// Extract inscriptions to this folder
-        #[arg(long)]
-        extract: Option<PathBuf>,
-    },
-    /// Scan a transaction and print/extract every recognizable Inscription
-    ScanTx {
-        /// Txid to scan
-        tx: Txid,
-
-        /// Blockhash of transaction (not required if node is using txindex=1)
+    /// Scan a block and/or tx in order to view the embedded inscriptions. Specifying only a
+    /// blockhash will scan the entire block. Specifying a blockhash and a txid will scan that tx.
+    /// Optionally, an input can be specified to extract only that input.
+    ///
+    /// When connected to a node with `txindex=1` specified, blockhash is not required.
+    Scan {
+        /// Blockhash of transaction
         block: Option<BlockHash>,
+        ///
+        /// Txid to scan
+        tx: Option<Txid>,
 
         /// Optional input to scan (default to all inputs)
         #[arg(long)]
