@@ -15,6 +15,13 @@ fn main() -> anyhow::Result<()> {
 
     let inscriptions = scan::scan(&args)?;
     for inscription in inscriptions {
+        if let Some(true) = args.web() {
+            open::that(format!(
+                "https://ordinals.com/inscription/{}",
+                inscription.inscription_id(),
+            ))?;
+        }
+
         if let Some(extract) = args.extract() {
             if !extract.is_dir() {
                 bail!("Extract must be a folder");

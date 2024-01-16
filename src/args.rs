@@ -77,23 +77,21 @@ impl Args {
             Commands::Scan {
                 block: Some(block),
                 tx: None,
-                input: _,
                 filter,
-                extract: _extract,
+                ..
             } => ScanMode::Block(*block, filter.clone()),
             Commands::Scan {
                 block,
                 tx: Some(txid),
                 input: Some(input),
-                filter: _filter,
-                extract: _extract,
+                ..
             } => ScanMode::Input(*input, *txid, *block),
             Commands::Scan {
                 block,
                 tx: Some(txid),
                 input: _input,
                 filter,
-                extract: _extract,
+                ..
             } => ScanMode::Transaction(*txid, *block, filter.clone()),
             _ => bail!("Cannot determine scan mode"),
         };
@@ -102,13 +100,13 @@ impl Args {
 
     pub fn extract(&self) -> Option<&PathBuf> {
         match &self.command {
-            Commands::Scan {
-                block: _,
-                tx: _,
-                filter: _,
-                input: _,
-                extract,
-            } => extract.as_ref(),
+            Commands::Scan { extract, .. } => extract.as_ref(),
+        }
+    }
+
+    pub fn web(&self) -> Option<bool> {
+        match &self.command {
+            Commands::Scan { web, .. } => Some(*web),
         }
     }
 }
@@ -122,9 +120,11 @@ pub enum Commands {
     /// When connected to a node with `txindex=1` specified, blockhash is not required.
     Scan {
         /// Blockhash of transaction
+        #[arg(long)]
         block: Option<BlockHash>,
-        ///
+
         /// Txid to scan
+        #[arg(long)]
         tx: Option<Txid>,
 
         /// Optional input to scan (default to all inputs)
@@ -138,6 +138,10 @@ pub enum Commands {
         /// Extract inscriptions to this folder
         #[arg(long)]
         extract: Option<PathBuf>,
+
+        /// View the inscription on the web
+        #[arg(long)]
+        web: bool,
     },
 }
 
