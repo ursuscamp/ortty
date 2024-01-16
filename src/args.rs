@@ -26,7 +26,7 @@ pub struct Args {
     pub cookie: Option<PathBuf>,
 
     #[command(subcommand)]
-    command: Commands,
+    pub command: Commands,
 }
 
 impl Args {
@@ -101,12 +101,14 @@ impl Args {
     pub fn extract(&self) -> Option<&PathBuf> {
         match &self.command {
             Commands::Scan { extract, .. } => extract.as_ref(),
+            _ => None,
         }
     }
 
     pub fn web(&self) -> Option<bool> {
         match &self.command {
             Commands::Scan { web, .. } => Some(*web),
+            _ => None,
         }
     }
 }
@@ -143,6 +145,9 @@ pub enum Commands {
         #[arg(long)]
         web: bool,
     },
+
+    /// Explore the blockchain interactively
+    Explore,
 }
 
 pub enum ScanMode {

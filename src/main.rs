@@ -1,9 +1,11 @@
 use anyhow::bail;
 use clap::Parser;
+use explore::explore;
 
 use crate::args::Args;
 
 mod args;
+mod explore;
 mod filter;
 mod inscription;
 mod scan;
@@ -13,8 +15,16 @@ fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
+    match args.command {
+        args::Commands::Scan { .. } => scan(&args)?,
+        args::Commands::Explore => explore(&args)?,
+    }
+    Ok(())
+}
+
+fn scan(args: &Args) -> Result<(), anyhow::Error> {
     let inscriptions = scan::scan(&args)?;
-    for inscription in inscriptions {
+    Ok(for inscription in inscriptions {
         if let Some(true) = args.web() {
             open::that(format!(
                 "https://ordinals.com/inscription/{}",
@@ -37,6 +47,5 @@ fn main() -> anyhow::Result<()> {
         } else {
             inscription.print()?;
         }
-    }
-    Ok(())
+    })
 }
