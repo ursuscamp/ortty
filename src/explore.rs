@@ -1,5 +1,5 @@
 use bitcoincore_rpc::{Client, RpcApi};
-use inquire::Select;
+use inquire::{MultiSelect, Select};
 
 use crate::{args::Args, filter::Filter, inscription::Inscription};
 
@@ -7,6 +7,7 @@ use crate::{args::Args, filter::Filter, inscription::Inscription};
 enum View {
     MainMenu,
     RecentBlocks,
+    InscriptionFilters,
     ViewBlock(u64),
 }
 
@@ -21,7 +22,7 @@ impl State {
         Ok(State {
             view: vec![View::MainMenu],
             client: Client::new(&args.rpc_host(), args.rpc_auth()?)?,
-            filters: vec![],
+            filters: Filter::all(),
         })
     }
 }
@@ -32,6 +33,7 @@ pub fn explore(args: &Args) -> anyhow::Result<()> {
         match view {
             View::MainMenu => main_menu(&mut state)?,
             View::RecentBlocks => recent_blocks(&mut state)?,
+            View::InscriptionFilters => set_filters(&mut state)?,
             View::ViewBlock(blockheight) => view_block(&mut state, blockheight)?,
         };
     }
@@ -39,10 +41,11 @@ pub fn explore(args: &Args) -> anyhow::Result<()> {
 }
 
 fn main_menu(state: &mut State) -> anyhow::Result<()> {
-    let options = vec!["Recent Blocks", "Quit"];
+    let options = vec!["Recent Blocks", "Inscription Filters", "Quit"];
     let picked = Select::new("Interactive Explorer", options).prompt()?;
     match picked {
         "Recent Blocks" => state.view.push(View::RecentBlocks),
+        "Inscription Filters" => state.view.push(View::InscriptionFilters),
         "Quit" => state.view.clear(),
         _ => unreachable!(),
     }
@@ -70,16 +73,36 @@ fn recent_blocks(state: &mut State) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn set_filters(state: &mut State) -> anyhow::Result<()> {
+    let options = Filter::all();
+    let selected: Vec<usize> = options
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, opt)| {
+            if state.filters.contains(opt) {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let mut new_filters = MultiSelect::new("Select inscription types to filter", options)
+        .with_default(&selected)
+        .prompt()?;
+    new_filters.sort();
+    state.filters = new_filters;
+    state.view.pop();
+    Ok(())
+}
+
 fn view_block(state: &mut State, blockheight: u64) -> anyhow::Result<()> {
     let bh = state.client.get_block_hash(blockheight)?;
     let block = state.client.get_block(&bh)?;
     let mut inscriptions = Vec::with_capacity(300);
     for tx in block.txdata {
-        let txins = Inscription::extract_all(&tx)?.into_iter().filter(|i| {
-            // If filters aren't empty, then filter inscriptions by them
-            state.filters.is_empty()
-                || (state.filters.len() > 0 && state.filters.iter().any(|f| f.inscription(&i)))
-        });
+        let txins = Inscription::extract_all(&tx)?
+            .into_iter()
+            .filter(|i| state.filters.iter().any(|f| f.inscription(&i)));
         inscriptions.extend(txins);
     }
     inscriptions.iter().for_each(|i| {

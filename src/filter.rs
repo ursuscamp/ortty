@@ -1,10 +1,10 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
 
 use crate::inscription::Inscription;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Filter {
     Text,
     Json,
@@ -13,6 +13,10 @@ pub enum Filter {
 }
 
 impl Filter {
+    pub fn all() -> Vec<Self> {
+        vec![Filter::Text, Filter::Json, Filter::Brc20, Filter::Image]
+    }
+
     pub fn inscription(&self, inscription: &Inscription) -> bool {
         match self {
             Filter::Text => inscription.parsed.is_text(),
@@ -20,6 +24,19 @@ impl Filter {
             Filter::Brc20 => inscription.parsed.is_brc20(),
             Filter::Image => inscription.parsed.is_image(),
         }
+    }
+}
+
+impl Display for Filter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Filter::Text => f.write_str("Text")?,
+            Filter::Json => f.write_str("JSON")?,
+            Filter::Brc20 => f.write_str("BRC-20")?,
+            Filter::Image => f.write_str("Image")?,
+        }
+
+        Ok(())
     }
 }
 
