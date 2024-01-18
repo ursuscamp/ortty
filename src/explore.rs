@@ -31,7 +31,7 @@ pub fn explore(args: &Args) -> anyhow::Result<()> {
     while let Some(view) = state.view.last().copied() {
         match view {
             View::MainMenu => main_menu(&mut state)?,
-            View::RecentBlocks => select_recent_block(&mut state)?,
+            View::RecentBlocks => recent_blocks(&mut state)?,
             View::ViewBlock(blockheight) => view_block(&mut state, blockheight)?,
         };
     }
@@ -49,14 +49,23 @@ fn main_menu(state: &mut State) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn select_recent_block(state: &mut State) -> anyhow::Result<()> {
+fn recent_blocks(state: &mut State) -> anyhow::Result<()> {
     let latest_block = state.client.get_blockchain_info()?;
     let block_number = latest_block.blocks - 1;
     let oldest_block = block_number.checked_sub(100).unwrap_or_default();
-    let mut options: Vec<_> = (oldest_block..=block_number).collect();
+    let mut options: Vec<_> = (oldest_block..=block_number)
+        .map(|i| i.to_string())
+        .collect();
+    options.push("Back".into());
     options.reverse();
-    let picked = Select::new("Select block to view", options).prompt()?;
-    state.view.pop();
+    let picked = Select::new("Select block to view", options)
+        .with_page_size(30)
+        .prompt()?;
+    if picked == "Back" {
+        state.view.pop();
+        return Ok(());
+    }
+    let picked: u64 = picked.parse()?;
     state.view.push(View::ViewBlock(picked));
     Ok(())
 }
