@@ -54,6 +54,16 @@ pub struct Inscription {
 }
 
 impl Inscription {
+    pub fn extract_all(tx: &Transaction) -> anyhow::Result<Vec<Inscription>> {
+        let mut inscriptions = Vec::with_capacity(1);
+        for (idx, _) in tx.input.iter().enumerate() {
+            if let Some(inscription) = Inscription::extract_witness(tx, idx)? {
+                inscriptions.push(inscription);
+            }
+        }
+        Ok(inscriptions)
+    }
+
     pub fn extract_witness(tx: &Transaction, input: usize) -> anyhow::Result<Option<Inscription>> {
         let txin = tx
             .input
