@@ -1,19 +1,34 @@
+use std::sync::Arc;
+
 use bitcoincore_rpc::{Client, RpcApi};
 use inquire::{MultiSelect, Select};
 
 use crate::{args::Args, filter::Filter, inscription::Inscription};
 
-#[derive(Clone, Copy)]
+/// Views are maintained in a stack. The top item in the View stack is rendered as the current
+/// view. If the View is finished, it is popped of the stack. If no Views remain, then the
+/// application is finished and exits normally.
+#[derive(Clone)]
 enum View {
     MainMenu,
-    ViewBlocks(Option<u64>),
+    SelectBlocks(Option<u64>),
     InscriptionFilters,
-    ViewBlock(u64),
+
+    /// This doesn't actually render anything, it is a faux view that retrieve states and pushes
+    /// the next view onto the stack
+    RetrieveBlockInscriptions(u64),
+    SelectInscriptions(Vec<Arc<Inscription>>, Option<usize>),
+    PrintInscription(Arc<Inscription>),
 }
 
 struct State {
+    /// The View stack.
     view: Vec<View>,
+
+    /// JSON RPC client.
     client: Client,
+
+    /// The user's currently selected filters.
     filters: Vec<Filter>,
 }
 
@@ -27,14 +42,34 @@ impl State {
     }
 }
 
+struct InscriptionView(Arc<Inscription>);
+
+impl std::fmt::Display for InscriptionView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{} ({}): {} bytes]",
+            self.0.inscription_id(),
+            self.0.mime,
+            self.0.data.len()
+        )
+    }
+}
+
 pub fn explore(args: &Args) -> anyhow::Result<()> {
     let mut state = State::new(args)?;
-    while let Some(view) = state.view.last().copied() {
+    while let Some(view) = state.view.last().cloned() {
         match view {
             View::MainMenu => main_menu(&mut state)?,
-            View::ViewBlocks(start) => view_blocks(&mut state, start)?,
+            View::SelectBlocks(start) => select_blocks(&mut state, start)?,
             View::InscriptionFilters => set_filters(&mut state)?,
-            View::ViewBlock(blockheight) => view_block(&mut state, blockheight)?,
+            View::RetrieveBlockInscriptions(blockheight) => {
+                retrieve_block_inscriptions(&mut state, blockheight)?
+            }
+            View::SelectInscriptions(inscriptions, selected) => {
+                select_inscriptions(&mut state, &inscriptions, selected)?
+            }
+            View::PrintInscription(inscription) => print_inscription(&mut state, inscription)?,
         };
     }
     Ok(())
@@ -44,7 +79,7 @@ fn main_menu(state: &mut State) -> anyhow::Result<()> {
     let options = vec!["View Blocks", "Inscription Filters", "Quit"];
     let picked = Select::new("Interactive Explorer", options).prompt()?;
     match picked {
-        "View Blocks" => state.view.push(View::ViewBlocks(None)),
+        "View Blocks" => state.view.push(View::SelectBlocks(None)),
         "Inscription Filters" => state.view.push(View::InscriptionFilters),
         "Quit" => state.view.clear(),
         _ => unreachable!(),
@@ -52,7 +87,7 @@ fn main_menu(state: &mut State) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn view_blocks(state: &mut State, start: Option<u64>) -> anyhow::Result<()> {
+fn select_blocks(state: &mut State, start: Option<u64>) -> anyhow::Result<()> {
     let block_number = match start {
         Some(sb) => sb,
         None => {
@@ -80,7 +115,7 @@ fn view_blocks(state: &mut State, start: Option<u64>) -> anyhow::Result<()> {
         "Next Page" => {
             state
                 .view
-                .push(View::ViewBlocks(oldest_block.checked_sub(1)));
+                .push(View::SelectBlocks(oldest_block.checked_sub(1)));
             return Ok(());
         }
         "Home" => {
@@ -90,7 +125,7 @@ fn view_blocks(state: &mut State, start: Option<u64>) -> anyhow::Result<()> {
         }
         _ => {
             let picked: u64 = picked.parse()?;
-            state.view.push(View::ViewBlock(picked));
+            state.view.push(View::RetrieveBlockInscriptions(picked));
             return Ok(());
         }
     }
@@ -118,7 +153,7 @@ fn set_filters(state: &mut State) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn view_block(state: &mut State, blockheight: u64) -> anyhow::Result<()> {
+fn retrieve_block_inscriptions(state: &mut State, blockheight: u64) -> anyhow::Result<()> {
     let bh = state.client.get_block_hash(blockheight)?;
     let block = state.client.get_block(&bh)?;
     let mut inscriptions = Vec::with_capacity(300);
@@ -128,9 +163,42 @@ fn view_block(state: &mut State, blockheight: u64) -> anyhow::Result<()> {
             .filter(|i| state.filters.iter().any(|f| f.inscription(&i)));
         inscriptions.extend(txins);
     }
-    inscriptions.iter().for_each(|i| {
-        i.print().ok();
-    });
+    state.view.pop();
+    if inscriptions.is_empty() {
+        println!("No results found");
+        return Ok(());
+    }
+    state
+        .view
+        .push(View::SelectInscriptions(inscriptions, None));
+    Ok(())
+}
+
+fn select_inscriptions(
+    state: &mut State,
+    inscriptions: &[Arc<Inscription>],
+    index: Option<usize>,
+) -> anyhow::Result<()> {
+    let iviews: Vec<InscriptionView> = inscriptions
+        .into_iter()
+        .cloned()
+        .map(InscriptionView)
+        .collect();
+    let selected = Select::new("Select inscription", iviews)
+        .with_starting_cursor(index.unwrap_or_default())
+        .raw_prompt()?;
+
+    // Overwrite the selector index so that the next round it will start at the same index
+    match state.view.last_mut() {
+        Some(View::SelectInscriptions(_, o)) => *o = Some(selected.index),
+        _ => {}
+    }
+    state.view.push(View::PrintInscription(selected.value.0));
+    Ok(())
+}
+
+fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow::Result<()> {
+    inscription.print()?;
     state.view.pop();
     Ok(())
 }

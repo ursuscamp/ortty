@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::RpcApi;
 
@@ -7,7 +9,7 @@ use crate::{
     inscription::Inscription,
 };
 
-pub fn scan(args: &Args) -> anyhow::Result<Vec<Inscription>> {
+pub fn scan(args: &Args) -> anyhow::Result<Vec<Arc<Inscription>>> {
     match args.scan_mode()? {
         ScanMode::Block(block, filter) => scan_block(args, &block, &filter),
         ScanMode::Transaction(txid, block, filter) => {
@@ -21,7 +23,7 @@ fn scan_block(
     args: &Args,
     block: &BlockHash,
     filters: &[Filter],
-) -> anyhow::Result<Vec<Inscription>> {
+) -> anyhow::Result<Vec<Arc<Inscription>>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let block = rpc.get_block(block)?;
     let mut inscriptions = Vec::new();
@@ -48,16 +50,16 @@ fn scan_transaction(
     txid: &Txid,
     block: &Option<BlockHash>,
     filters: &[Filter],
-) -> anyhow::Result<Vec<Inscription>> {
+) -> anyhow::Result<Vec<Arc<Inscription>>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let tx = rpc.get_raw_transaction(&txid, block.as_ref())?;
-    let inscriptions: anyhow::Result<Vec<Option<Inscription>>> = tx
+    let inscriptions: anyhow::Result<Vec<Option<Arc<Inscription>>>> = tx
         .input
         .iter()
         .enumerate()
         .map(|(input, _)| Inscription::extract_witness(&tx, input))
         .collect();
-    let inscriptions: Vec<Inscription> = inscriptions?
+    let inscriptions: Vec<Arc<Inscription>> = inscriptions?
         .into_iter()
         .filter(Option::is_some)
         .map(Option::unwrap)
@@ -79,7 +81,7 @@ fn scan_input(
     input: usize,
     txid: &Txid,
     blockhash: &Option<BlockHash>,
-) -> anyhow::Result<Vec<Inscription>> {
+) -> anyhow::Result<Vec<Arc<Inscription>>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let tx = rpc.get_raw_transaction(&txid, blockhash.as_ref())?;
     let inscription = Inscription::extract_witness(&tx, input)?;

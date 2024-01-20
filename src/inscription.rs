@@ -1,10 +1,11 @@
 use anyhow::anyhow;
 use image::{DynamicImage, EncodableLayout, ImageFormat};
-use std::{collections::VecDeque, path::PathBuf};
+use std::{collections::VecDeque, path::PathBuf, sync::Arc};
 
 use bitcoin::{opcodes::all::OP_IF, script::Instruction, Transaction, TxIn, Txid};
 use colored_json::{to_colored_json, ColorMode};
 
+#[derive(Clone)]
 pub enum ParsedData {
     Binary,
     Html(String),
@@ -45,6 +46,7 @@ impl ParsedData {
     }
 }
 
+#[derive(Clone)]
 pub struct Inscription {
     pub txid: Txid,
     pub input: usize,
@@ -53,8 +55,14 @@ pub struct Inscription {
     pub parsed: ParsedData,
 }
 
+impl std::fmt::Display for Inscription {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[Inscription {}]", self.inscription_id())
+    }
+}
+
 impl Inscription {
-    pub fn extract_all(tx: &Transaction) -> anyhow::Result<Vec<Inscription>> {
+    pub fn extract_all(tx: &Transaction) -> anyhow::Result<Vec<Arc<Inscription>>> {
         let mut inscriptions = Vec::with_capacity(1);
         for (idx, _) in tx.input.iter().enumerate() {
             if let Some(inscription) = Inscription::extract_witness(tx, idx)? {
@@ -64,20 +72,23 @@ impl Inscription {
         Ok(inscriptions)
     }
 
-    pub fn extract_witness(tx: &Transaction, input: usize) -> anyhow::Result<Option<Inscription>> {
+    pub fn extract_witness(
+        tx: &Transaction,
+        input: usize,
+    ) -> anyhow::Result<Option<Arc<Inscription>>> {
         let txin = tx
             .input
             .get(input)
             .ok_or_else(|| anyhow!("Missing input"))?;
         if let Some((mime, data)) = extract_inscription(txin) {
             let parsed = parse_data(&data, &mime);
-            return Ok(Some(Inscription {
+            return Ok(Some(Arc::new(Inscription {
                 txid: tx.txid(),
                 input,
                 mime,
                 data,
                 parsed,
-            }));
+            })));
         }
         Ok(None)
     }
