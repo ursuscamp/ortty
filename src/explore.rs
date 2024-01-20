@@ -6,7 +6,7 @@ use crate::{args::Args, filter::Filter, inscription::Inscription};
 #[derive(Clone, Copy)]
 enum View {
     MainMenu,
-    RecentBlocks,
+    ViewBlocks(Option<u64>),
     InscriptionFilters,
     ViewBlock(u64),
 }
@@ -32,7 +32,7 @@ pub fn explore(args: &Args) -> anyhow::Result<()> {
     while let Some(view) = state.view.last().copied() {
         match view {
             View::MainMenu => main_menu(&mut state)?,
-            View::RecentBlocks => recent_blocks(&mut state)?,
+            View::ViewBlocks(start) => view_blocks(&mut state, start)?,
             View::InscriptionFilters => set_filters(&mut state)?,
             View::ViewBlock(blockheight) => view_block(&mut state, blockheight)?,
         };
@@ -41,10 +41,10 @@ pub fn explore(args: &Args) -> anyhow::Result<()> {
 }
 
 fn main_menu(state: &mut State) -> anyhow::Result<()> {
-    let options = vec!["Recent Blocks", "Inscription Filters", "Quit"];
+    let options = vec!["View Blocks", "Inscription Filters", "Quit"];
     let picked = Select::new("Interactive Explorer", options).prompt()?;
     match picked {
-        "Recent Blocks" => state.view.push(View::RecentBlocks),
+        "View Blocks" => state.view.push(View::ViewBlocks(None)),
         "Inscription Filters" => state.view.push(View::InscriptionFilters),
         "Quit" => state.view.clear(),
         _ => unreachable!(),
@@ -52,25 +52,48 @@ fn main_menu(state: &mut State) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn recent_blocks(state: &mut State) -> anyhow::Result<()> {
-    let latest_block = state.client.get_blockchain_info()?;
-    let block_number = latest_block.blocks - 1;
+fn view_blocks(state: &mut State, start: Option<u64>) -> anyhow::Result<()> {
+    let block_number = match start {
+        Some(sb) => sb,
+        None => {
+            let latest_block = state.client.get_blockchain_info()?;
+            latest_block.blocks - 1
+        }
+    };
     let oldest_block = block_number.checked_sub(100).unwrap_or_default();
     let mut options: Vec<_> = (oldest_block..=block_number)
         .map(|i| i.to_string())
         .collect();
-    options.push("Back".into());
+
+    options.push("Previous Page".into());
+    options.push("Next Page".into());
+    options.push("Home".into());
     options.reverse();
     let picked = Select::new("Select block to view", options)
         .with_page_size(30)
         .prompt()?;
-    if picked == "Back" {
-        state.view.pop();
-        return Ok(());
+    match picked.as_str() {
+        "Previous Page" => {
+            state.view.pop();
+            return Ok(());
+        }
+        "Next Page" => {
+            state
+                .view
+                .push(View::ViewBlocks(oldest_block.checked_sub(1)));
+            return Ok(());
+        }
+        "Home" => {
+            state.view.clear();
+            state.view.push(View::MainMenu);
+            return Ok(());
+        }
+        _ => {
+            let picked: u64 = picked.parse()?;
+            state.view.push(View::ViewBlock(picked));
+            return Ok(());
+        }
     }
-    let picked: u64 = picked.parse()?;
-    state.view.push(View::ViewBlock(picked));
-    Ok(())
 }
 
 fn set_filters(state: &mut State) -> anyhow::Result<()> {
