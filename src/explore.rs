@@ -11,7 +11,10 @@ use crate::{args::Args, filter::Filter, inscription::Inscription};
 #[derive(Clone)]
 enum View {
     MainMenu,
-    SelectBlocks(Option<u64>),
+    SelectBlocks {
+        starting_block: Option<u64>,
+        index: Option<usize>,
+    },
     InscriptionFilters,
 
     /// This doesn't actually render anything, it is a faux view that retrieve states and pushes
@@ -61,7 +64,10 @@ pub fn explore(args: &Args) -> anyhow::Result<()> {
     while let Some(view) = state.view.last().cloned() {
         match view {
             View::MainMenu => main_menu(&mut state)?,
-            View::SelectBlocks(start) => select_blocks(&mut state, start)?,
+            View::SelectBlocks {
+                starting_block,
+                index,
+            } => select_blocks(&mut state, starting_block, index)?,
             View::InscriptionFilters => set_filters(&mut state)?,
             View::RetrieveBlockInscriptions(blockheight) => {
                 retrieve_block_inscriptions(&mut state, blockheight)?
@@ -79,7 +85,10 @@ fn main_menu(state: &mut State) -> anyhow::Result<()> {
     let options = vec!["View Blocks", "Inscription Filters", "Quit"];
     let picked = Select::new("Interactive Explorer", options).prompt()?;
     match picked {
-        "View Blocks" => state.view.push(View::SelectBlocks(None)),
+        "View Blocks" => state.view.push(View::SelectBlocks {
+            starting_block: None,
+            index: None,
+        }),
         "Inscription Filters" => state.view.push(View::InscriptionFilters),
         "Quit" => state.view.clear(),
         _ => unreachable!(),
@@ -87,7 +96,11 @@ fn main_menu(state: &mut State) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn select_blocks(state: &mut State, start: Option<u64>) -> anyhow::Result<()> {
+fn select_blocks(
+    state: &mut State,
+    start: Option<u64>,
+    index: Option<usize>,
+) -> anyhow::Result<()> {
     let block_number = match start {
         Some(sb) => sb,
         None => {
@@ -106,16 +119,26 @@ fn select_blocks(state: &mut State, start: Option<u64>) -> anyhow::Result<()> {
     options.reverse();
     let picked = Select::new("Select block to view", options)
         .with_page_size(30)
-        .prompt()?;
-    match picked.as_str() {
+        .with_starting_cursor(index.unwrap_or_default())
+        .raw_prompt()?;
+
+    // Replace the current index with the new selected index so that when this view get rendered
+    // again next time it will start on the same index as the last picked option
+    match state.view.last_mut() {
+        Some(View::SelectBlocks { index, .. }) => *index = Some(picked.index),
+        _ => {}
+    }
+
+    match picked.value.as_str() {
         "Previous Page" => {
             state.view.pop();
             return Ok(());
         }
         "Next Page" => {
-            state
-                .view
-                .push(View::SelectBlocks(oldest_block.checked_sub(1)));
+            state.view.push(View::SelectBlocks {
+                starting_block: oldest_block.checked_sub(1),
+                index: None,
+            });
             return Ok(());
         }
         "Home" => {
@@ -124,7 +147,7 @@ fn select_blocks(state: &mut State, start: Option<u64>) -> anyhow::Result<()> {
             return Ok(());
         }
         _ => {
-            let picked: u64 = picked.parse()?;
+            let picked: u64 = picked.value.parse()?;
             state.view.push(View::RetrieveBlockInscriptions(picked));
             return Ok(());
         }
@@ -186,6 +209,7 @@ fn select_inscriptions(
         .collect();
     let selected = Select::new("Select inscription", iviews)
         .with_starting_cursor(index.unwrap_or_default())
+        .with_page_size(30)
         .raw_prompt()?;
 
     // Overwrite the selector index so that the next round it will start at the same index
