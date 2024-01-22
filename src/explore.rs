@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use bitcoincore_rpc::{Client, RpcApi};
 use inquire::{MultiSelect, Select};
@@ -248,6 +248,16 @@ fn select_inscriptions(
 fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow::Result<()> {
     if state.extra_opts.web {
         inscription.open_web()?;
+    }
+    if state.extra_opts.extract {
+        let fname = format!(
+            "{}.{}",
+            inscription.inscription_id(),
+            inscription.file_extension()
+        );
+        let p = PathBuf::from(&fname);
+        println!("Writing inscription to {fname}...");
+        inscription.write_to_file(&p)?;
     }
     inscription.print()?;
     state.view.pop();
