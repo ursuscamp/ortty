@@ -267,6 +267,7 @@ fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow
     if state.extra_opts.web {
         inscription.open_web()?;
     }
+
     if state.extra_opts.extract {
         let fname = format!(
             "{}.{}",
@@ -277,7 +278,11 @@ fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow
         println!("Writing inscription to {fname}...");
         inscription.write_to_file(&p)?;
     }
-    inscription.print()?;
+
+    if state.extra_opts.render {
+        inscription.print()?;
+    }
+
     state.view.pop();
     Ok(())
 }
