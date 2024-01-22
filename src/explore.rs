@@ -53,17 +53,25 @@ impl State {
     }
 }
 
-struct InscriptionView(Arc<Inscription>);
+enum InscriptionView {
+    Home,
+    Inscription(Arc<Inscription>),
+}
 
 impl std::fmt::Display for InscriptionView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "[{} ({}): {} bytes]",
-            self.0.inscription_id(),
-            self.0.mime,
-            self.0.data.len()
-        )
+        match self {
+            InscriptionView::Home => f.write_str("Home"),
+            InscriptionView::Inscription(i) => {
+                write!(
+                    f,
+                    "[{} ({}): {} bytes]",
+                    i.inscription_id(),
+                    i.mime,
+                    i.data.len()
+                )
+            }
+        }
     }
 }
 
@@ -226,10 +234,14 @@ fn select_inscriptions(
     inscriptions: &[Arc<Inscription>],
     index: Option<usize>,
 ) -> anyhow::Result<()> {
-    let iviews: Vec<InscriptionView> = inscriptions
+    let iviews: Vec<InscriptionView> = [InscriptionView::Home]
         .into_iter()
-        .cloned()
-        .map(InscriptionView)
+        .chain(
+            inscriptions
+                .into_iter()
+                .cloned()
+                .map(InscriptionView::Inscription),
+        )
         .collect();
     let selected = Select::new("Select inscription", iviews)
         .with_starting_cursor(index.unwrap_or_default())
@@ -241,7 +253,13 @@ fn select_inscriptions(
         Some(View::SelectInscriptions(_, o)) => *o = Some(selected.index),
         _ => {}
     }
-    state.view.push(View::PrintInscription(selected.value.0));
+    match selected.value {
+        InscriptionView::Home => {
+            state.view.clear();
+            state.view.push(View::MainMenu);
+        }
+        InscriptionView::Inscription(i) => state.view.push(View::PrintInscription(i)),
+    }
     Ok(())
 }
 
