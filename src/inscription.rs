@@ -231,6 +231,7 @@ fn print_image(image: &DynamicImage) -> anyhow::Result<()> {
     let config = viuer::Config {
         absolute_offset: false,
         y: 1,
+        width: Some(40),
         ..Default::default()
     };
     viuer::print(image, &config)?;
