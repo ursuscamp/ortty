@@ -2,14 +2,12 @@
 pub(super) enum ExtraOption {
     Extract,
     Web,
-    Ordinals,
-    Atomicals,
 }
 
 impl ExtraOption {
     pub(super) fn all() -> Vec<Self> {
         use ExtraOption::*;
-        vec![Extract, Web, Ordinals, Atomicals]
+        vec![Extract, Web]
     }
 }
 
@@ -21,8 +19,6 @@ impl std::fmt::Display for ExtraOption {
             match self {
                 ExtraOption::Extract => "Extract inscriptions to current directory",
                 ExtraOption::Web => "Open inscription on web",
-                ExtraOption::Ordinals => "Show standard Ordinals inscriptions",
-                ExtraOption::Atomicals => "Show Atomicals inscriptions",
             }
         )
     }
@@ -31,8 +27,6 @@ impl std::fmt::Display for ExtraOption {
 pub(super) struct ExtraOptions {
     pub(super) extract: bool,
     pub(super) web: bool,
-    pub(super) ordinals: bool,
-    pub(super) atomicals: bool,
 }
 
 impl ExtraOptions {
@@ -40,8 +34,6 @@ impl ExtraOptions {
         match opt {
             ExtraOption::Extract => self.extract,
             ExtraOption::Web => self.web,
-            ExtraOption::Ordinals => self.ordinals,
-            ExtraOption::Atomicals => self.atomicals,
         }
     }
 
@@ -56,8 +48,6 @@ impl ExtraOptions {
     pub(super) fn set_false(&mut self) {
         self.extract = false;
         self.web = false;
-        self.ordinals = false;
-        self.atomicals = false;
     }
 
     pub(super) fn set_opts(&mut self, opts: &[ExtraOption]) {
@@ -66,8 +56,6 @@ impl ExtraOptions {
             match opt {
                 ExtraOption::Extract => self.extract = true,
                 ExtraOption::Web => self.web = true,
-                ExtraOption::Ordinals => self.ordinals = true,
-                ExtraOption::Atomicals => self.atomicals = true,
             }
         }
     }
@@ -78,8 +66,6 @@ impl Default for ExtraOptions {
         Self {
             extract: Default::default(),
             web: Default::default(),
-            ordinals: true,
-            atomicals: Default::default(),
         }
     }
 }
