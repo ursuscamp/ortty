@@ -5,6 +5,10 @@ use inquire::{MultiSelect, Select};
 
 use crate::{args::Args, filter::Filter, inscription::Inscription};
 
+mod opts;
+
+use opts::*;
+
 /// Views are maintained in a stack. The top item in the View stack is rendered as the current
 /// view. If the View is finished, it is popped of the stack. If no Views remain, then the
 /// application is finished and exits normally.
@@ -16,6 +20,7 @@ enum View {
         index: Option<usize>,
     },
     InscriptionFilters,
+    ExtraOptions,
 
     /// This doesn't actually render anything, it is a faux view that retrieve states and pushes
     /// the next view onto the stack
@@ -23,7 +28,6 @@ enum View {
     SelectInscriptions(Vec<Arc<Inscription>>, Option<usize>),
     PrintInscription(Arc<Inscription>),
 }
-
 struct State {
     /// The View stack.
     view: Vec<View>,
@@ -33,6 +37,9 @@ struct State {
 
     /// The user's currently selected filters.
     filters: Vec<Filter>,
+
+    // Extra options that the user can set
+    extra_opts: ExtraOptions,
 }
 
 impl State {
@@ -41,6 +48,7 @@ impl State {
             view: vec![View::MainMenu],
             client: Client::new(&args.rpc_host(), args.rpc_auth()?)?,
             filters: Filter::all(),
+            extra_opts: ExtraOptions::default(),
         })
     }
 }
@@ -69,6 +77,7 @@ pub fn explore(args: &Args) -> anyhow::Result<()> {
                 index,
             } => select_blocks(&mut state, starting_block, index)?,
             View::InscriptionFilters => set_filters(&mut state)?,
+            View::ExtraOptions => set_extra_options(&mut state)?,
             View::RetrieveBlockInscriptions(blockheight) => {
                 retrieve_block_inscriptions(&mut state, blockheight)?
             }
@@ -82,7 +91,12 @@ pub fn explore(args: &Args) -> anyhow::Result<()> {
 }
 
 fn main_menu(state: &mut State) -> anyhow::Result<()> {
-    let options = vec!["View Blocks", "Inscription Filters", "Quit"];
+    let options = vec![
+        "View Blocks",
+        "Inscription Filters",
+        "Extra Options",
+        "Quit",
+    ];
     let picked = Select::new("Interactive Explorer", options).prompt()?;
     match picked {
         "View Blocks" => state.view.push(View::SelectBlocks {
@@ -90,6 +104,7 @@ fn main_menu(state: &mut State) -> anyhow::Result<()> {
             index: None,
         }),
         "Inscription Filters" => state.view.push(View::InscriptionFilters),
+        "Extra Options" => state.view.push(View::ExtraOptions),
         "Quit" => state.view.clear(),
         _ => unreachable!(),
     }
@@ -172,6 +187,15 @@ fn set_filters(state: &mut State) -> anyhow::Result<()> {
         .prompt()?;
     new_filters.sort();
     state.filters = new_filters;
+    state.view.pop();
+    Ok(())
+}
+
+fn set_extra_options(state: &mut State) -> anyhow::Result<()> {
+    let selected = MultiSelect::new("Set additional options", ExtraOption::all())
+        .with_default(&state.extra_opts.current_set_indexes())
+        .prompt()?;
+    state.extra_opts.set_opts(&selected);
     state.view.pop();
     Ok(())
 }
