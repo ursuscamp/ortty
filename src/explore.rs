@@ -246,6 +246,9 @@ fn select_inscriptions(
 }
 
 fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow::Result<()> {
+    if state.extra_opts.web {
+        inscription.open_web()?;
+    }
     inscription.print()?;
     state.view.pop();
     Ok(())

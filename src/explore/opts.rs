@@ -29,10 +29,10 @@ impl std::fmt::Display for ExtraOption {
 }
 
 pub(super) struct ExtraOptions {
-    extract: bool,
-    web: bool,
-    ordinals: bool,
-    atomicals: bool,
+    pub(super) extract: bool,
+    pub(super) web: bool,
+    pub(super) ordinals: bool,
+    pub(super) atomicals: bool,
 }
 
 impl ExtraOptions {
