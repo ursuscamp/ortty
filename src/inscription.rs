@@ -105,6 +105,10 @@ impl Inscription {
     }
 
     pub fn write_to_file(&self, path: &PathBuf) -> anyhow::Result<()> {
+        match path.parent() {
+            Some(dir) if !dir.exists() => std::fs::create_dir_all(&dir)?,
+            _ => {}
+        }
         std::fs::write(path, &self.data)?;
         Ok(())
     }

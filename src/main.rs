@@ -1,4 +1,3 @@
-use anyhow::bail;
 use clap::Parser;
 use explore::explore;
 
@@ -33,9 +32,6 @@ fn scan(args: &Args) -> Result<(), anyhow::Error> {
         }
 
         if let Some(extract) = args.extract() {
-            if !extract.is_dir() {
-                bail!("Extract must be a folder");
-            }
             let fname = format!(
                 "{}.{}",
                 inscription.inscription_id(),
