@@ -129,6 +129,15 @@ impl Inscription {
         }
     }
 
+    /// Open an inscription the default indexer
+    pub fn open_web(&self) -> anyhow::Result<()> {
+        open::that(format!(
+            "https://ordinals.com/inscription/{}",
+            self.inscription_id(),
+        ))?;
+        Ok(())
+    }
+
     pub fn inscription_id(&self) -> String {
         format!("{}i{}", self.txid, self.input)
     }

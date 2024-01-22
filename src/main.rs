@@ -25,10 +25,7 @@ fn scan(args: &Args) -> Result<(), anyhow::Error> {
     let inscriptions = scan::scan(&args)?;
     Ok(for inscription in inscriptions {
         if let Some(true) = args.web() {
-            open::that(format!(
-                "https://ordinals.com/inscription/{}",
-                inscription.inscription_id(),
-            ))?;
+            inscription.open_web()?;
         }
 
         if let Some(extract) = args.extract() {
