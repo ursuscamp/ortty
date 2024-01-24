@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use bitcoincore_rpc::RpcApi;
 use image::{DynamicImage, EncodableLayout, ImageFormat};
 use std::{collections::VecDeque, path::PathBuf, sync::Arc};
 
@@ -39,6 +40,32 @@ impl ParsedData {
 
     pub fn is_image(&self) -> bool {
         matches!(self, ParsedData::Image(_))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InscriptionId(Txid, usize);
+
+impl std::str::FromStr for InscriptionId {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut id = s.split('i');
+        let txid = id
+            .next()
+            .and_then(|v| v.parse().ok())
+            .ok_or_else(|| anyhow!("Inscription ID parse error"))?;
+        let input = id
+            .next()
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| anyhow!("Inscription ID parse error"))?;
+        Ok(InscriptionId(txid, input))
+    }
+}
+
+impl std::fmt::Display for InscriptionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}i{}", self.0, self.1)
     }
 }
 
@@ -235,5 +262,19 @@ fn print_image(image: &DynamicImage) -> anyhow::Result<()> {
 fn print_json(value: &serde_json::Value) -> anyhow::Result<()> {
     let formatted = to_colored_json(value, ColorMode::On)?;
     println!("{formatted}");
+    Ok(())
+}
+
+pub(crate) fn fetch_and_print(
+    args: &crate::args::Args,
+    inscription_id: &InscriptionId,
+) -> anyhow::Result<()> {
+    let client = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
+    let tx = client.get_raw_transaction(&inscription_id.0, None)?;
+    let inscription = Inscription::extract_witness(&tx, inscription_id.1)?
+        .ok_or_else(|| anyhow!("Inscription not found"))?;
+    inscription.print()?;
+    println!();
+
     Ok(())
 }

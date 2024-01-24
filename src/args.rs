@@ -5,7 +5,7 @@ use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::Auth;
 use directories::BaseDirs;
 
-use crate::filter::Filter;
+use crate::{filter::Filter, inscription::InscriptionId};
 
 #[derive(clap::Parser, Debug)]
 pub struct Args {
@@ -159,6 +159,9 @@ pub enum Commands {
 
     /// Explore the blockchain interactively
     Explore,
+
+    /// View a single inscription by inscription id. Requires node with txindex=1
+    Inscription { inscription_id: InscriptionId },
 }
 
 pub enum ScanMode {

@@ -18,6 +18,9 @@ fn main() -> anyhow::Result<()> {
     match args.command {
         args::Commands::Scan { .. } => scan(&args)?,
         args::Commands::Explore => explore(&args)?,
+        args::Commands::Inscription { ref inscription_id } => {
+            inscription::fetch_and_print(&args, inscription_id)?
+        }
     }
     Ok(())
 }
