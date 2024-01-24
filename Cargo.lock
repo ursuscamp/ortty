@@ -742,6 +742,7 @@ dependencies = [
  "bitcoincore-rpc",
  "clap",
  "colored_json",
+ "crossterm 0.27.0",
  "directories",
  "dotenv",
  "hex",

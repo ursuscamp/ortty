@@ -1,6 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use bitcoincore_rpc::{Client, RpcApi};
+use crossterm::style::Stylize;
 use inquire::{MultiSelect, Select};
 
 use crate::{args::Args, filter::Filter, inscription::Inscription};
@@ -66,9 +67,9 @@ impl std::fmt::Display for InscriptionView {
                 write!(
                     f,
                     "[{} ({}): {} bytes]",
-                    i.inscription_id(),
-                    i.mime,
-                    i.data.len()
+                    i.inscription_id().to_string().red(),
+                    i.mime.to_string().blue(),
+                    i.data.len().to_string().green()
                 )
             }
         }
@@ -141,7 +142,7 @@ fn select_blocks(
     options.push("Home".into());
     options.reverse();
     let picked = Select::new("Select block to view", options)
-        .with_page_size(30)
+        .with_page_size(page_size())
         .with_starting_cursor(index.unwrap_or_default())
         .raw_prompt()?;
 
@@ -245,7 +246,7 @@ fn select_inscriptions(
         .collect();
     let selected = Select::new("Select inscription", iviews)
         .with_starting_cursor(index.unwrap_or_default())
-        .with_page_size(30)
+        .with_page_size(page_size())
         .raw_prompt()?;
 
     // Overwrite the selector index so that the next round it will start at the same index
@@ -275,7 +276,7 @@ fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow
             inscription.file_extension()
         );
         let p = PathBuf::from(&fname);
-        println!("Writing inscription to {fname}...");
+        println!("Writing inscription to {}...", fname.green());
         inscription.write_to_file(&p)?;
     }
 
@@ -285,4 +286,9 @@ fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow
 
     state.view.pop();
     Ok(())
+}
+
+fn page_size() -> usize {
+    let (_, rows) = crossterm::terminal::size().unwrap_or((80, 20));
+    (rows / 4) as usize
 }
