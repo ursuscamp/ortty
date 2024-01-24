@@ -17,32 +17,28 @@ pub enum ParsedData {
 impl ParsedData {
     pub fn is_brc20(&self) -> bool {
         match self {
-            ParsedData::Json(json) => {
-                json.get("p").unwrap_or_else(|| &serde_json::Value::Null) == "brc-20"
-            }
+            ParsedData::Json(json) => json.get("p").unwrap_or(&serde_json::Value::Null) == "brc-20",
             _ => false,
         }
     }
 
     pub fn is_text(&self) -> bool {
-        match self {
-            ParsedData::Html(_) | ParsedData::Json(_) | ParsedData::Text(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ParsedData::Html(_) | ParsedData::Json(_) | ParsedData::Text(_)
+        )
     }
 
     pub fn is_json(&self) -> bool {
-        match self {
-            ParsedData::Json(_) => true,
-            _ => false,
-        }
+        matches!(self, ParsedData::Json(_))
+    }
+
+    pub fn is_html(&self) -> bool {
+        matches!(self, ParsedData::Html(_))
     }
 
     pub fn is_image(&self) -> bool {
-        match self {
-            ParsedData::Image(_) => true,
-            _ => false,
-        }
+        matches!(self, ParsedData::Image(_))
     }
 }
 
@@ -97,8 +93,8 @@ impl Inscription {
         match &self.parsed {
             ParsedData::Binary => println!("{}", hex::encode(self.data.as_bytes())),
             ParsedData::Html(text) | ParsedData::Text(text) => println!("{text}"),
-            ParsedData::Image(image) => print_image(&image)?,
-            ParsedData::Json(value) => print_json(&value)?,
+            ParsedData::Image(image) => print_image(image)?,
+            ParsedData::Json(value) => print_json(value)?,
         }
 
         Ok(())
@@ -106,7 +102,7 @@ impl Inscription {
 
     pub fn write_to_file(&self, path: &PathBuf) -> anyhow::Result<()> {
         match path.parent() {
-            Some(dir) if !dir.exists() => std::fs::create_dir_all(&dir)?,
+            Some(dir) if !dir.exists() => std::fs::create_dir_all(dir)?,
             _ => {}
         }
         std::fs::write(path, &self.data)?;
@@ -144,8 +140,6 @@ impl Inscription {
 }
 
 fn extract_inscription(txin: &TxIn) -> Option<(String, Vec<u8>)> {
-    let mime_type;
-    let bytes;
     let tapscript = txin.witness.tapscript()?;
     let ins: Result<VecDeque<Instruction<'_>>, _> = tapscript.instructions().collect();
     let mut ins = ins.ok()?;
@@ -173,11 +167,11 @@ fn extract_inscription(txin: &TxIn) -> Option<(String, Vec<u8>)> {
 
     // Check for file type or inscription
     let tag = ins.pop_front()?;
-    mime_type = extract_mime_type(&mut ins, tag).unwrap_or_default();
+    let mime_type = extract_mime_type(&mut ins, tag).unwrap_or_default();
 
     // Extract data
     let tag = ins.pop_front()?;
-    bytes = extract_data(&mut ins, tag);
+    let bytes = extract_data(&mut ins, tag);
 
     Some((mime_type, bytes))
 }
@@ -224,7 +218,7 @@ fn parse_data(data: &[u8], mime: &str) -> ParsedData {
         return ParsedData::Image(image);
     }
 
-    return ParsedData::Binary;
+    ParsedData::Binary
 }
 
 fn print_image(image: &DynamicImage) -> anyhow::Result<()> {

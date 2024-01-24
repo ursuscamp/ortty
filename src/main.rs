@@ -23,8 +23,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn scan(args: &Args) -> Result<(), anyhow::Error> {
-    let inscriptions = scan::scan(&args)?;
-    Ok(for inscription in inscriptions {
+    let inscriptions = scan::scan(args)?;
+    for inscription in inscriptions {
         if let Some(true) = args.web() {
             inscription.open_web()?;
         }
@@ -43,7 +43,8 @@ fn scan(args: &Args) -> Result<(), anyhow::Error> {
                 println!("{}:", inscription.inscription_id().yellow());
             }
             inscription.print()?;
-            println!("");
+            println!();
         }
-    })
+    }
+    Ok(())
 }

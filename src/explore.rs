@@ -148,34 +148,30 @@ fn select_blocks(
 
     // Replace the current index with the new selected index so that when this view get rendered
     // again next time it will start on the same index as the last picked option
-    match state.view.last_mut() {
-        Some(View::SelectBlocks { index, .. }) => *index = Some(picked.index),
-        _ => {}
+    if let Some(View::SelectBlocks { index, .. }) = state.view.last_mut() {
+        *index = Some(picked.index)
     }
 
     match picked.value.as_str() {
         "Previous Page" => {
             state.view.pop();
-            return Ok(());
         }
         "Next Page" => {
             state.view.push(View::SelectBlocks {
                 starting_block: oldest_block.checked_sub(1),
                 index: None,
             });
-            return Ok(());
         }
         "Home" => {
             state.view.clear();
             state.view.push(View::MainMenu);
-            return Ok(());
         }
         _ => {
             let picked: u64 = picked.value.parse()?;
             state.view.push(View::RetrieveBlockInscriptions(picked));
-            return Ok(());
         }
     }
+    Ok(())
 }
 
 fn set_filters(state: &mut State) -> anyhow::Result<()> {
@@ -216,7 +212,7 @@ fn retrieve_block_inscriptions(state: &mut State, blockheight: u64) -> anyhow::R
     for tx in block.txdata {
         let txins = Inscription::extract_all(&tx)?
             .into_iter()
-            .filter(|i| state.filters.iter().any(|f| f.inscription(&i)));
+            .filter(|i| state.filters.iter().any(|f| f.inscription(i)));
         inscriptions.extend(txins);
     }
     state.view.pop();
@@ -239,7 +235,7 @@ fn select_inscriptions(
         .into_iter()
         .chain(
             inscriptions
-                .into_iter()
+                .iter()
                 .cloned()
                 .map(InscriptionView::Inscription),
         )
@@ -250,9 +246,8 @@ fn select_inscriptions(
         .raw_prompt()?;
 
     // Overwrite the selector index so that the next round it will start at the same index
-    match state.view.last_mut() {
-        Some(View::SelectInscriptions(_, o)) => *o = Some(selected.index),
-        _ => {}
+    if let Some(View::SelectInscriptions(_, o)) = state.view.last_mut() {
+        *o = Some(selected.index)
     }
     match selected.value {
         InscriptionView::Home => {
