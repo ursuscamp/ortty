@@ -279,6 +279,8 @@ fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow
         inscription.print()?;
     }
 
+    println!();
+
     state.view.pop();
     Ok(())
 }
