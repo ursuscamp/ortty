@@ -9,12 +9,19 @@ pub enum Filter {
     Text,
     Json,
     Brc20,
+    Html,
     Image,
 }
 
 impl Filter {
     pub fn all() -> Vec<Self> {
-        vec![Filter::Text, Filter::Json, Filter::Brc20, Filter::Image]
+        vec![
+            Filter::Text,
+            Filter::Json,
+            Filter::Brc20,
+            Filter::Html,
+            Filter::Image,
+        ]
     }
 
     pub fn inscription(&self, inscription: &Inscription) -> bool {
@@ -22,6 +29,7 @@ impl Filter {
             Filter::Text => inscription.parsed.is_text(),
             Filter::Json => inscription.parsed.is_json(),
             Filter::Brc20 => inscription.parsed.is_brc20(),
+            Filter::Html => inscription.parsed.is_html(),
             Filter::Image => inscription.parsed.is_image(),
         }
     }
@@ -33,6 +41,7 @@ impl Display for Filter {
             Filter::Text => f.write_str("Text")?,
             Filter::Json => f.write_str("JSON")?,
             Filter::Brc20 => f.write_str("BRC-20")?,
+            Filter::Html => f.write_str("HTML")?,
             Filter::Image => f.write_str("Image")?,
         }
 
@@ -48,6 +57,7 @@ impl FromStr for Filter {
             "text" => Self::Text,
             "json" => Self::Json,
             "brc20" | "brc-20" => Self::Brc20,
+            "html" => Self::Html,
             "image" => Self::Image,
             _ => return Err(anyhow!("Unknown filter type")),
         };
