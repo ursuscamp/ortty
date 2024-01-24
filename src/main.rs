@@ -1,4 +1,5 @@
 use clap::Parser;
+use crossterm::style::Stylize;
 use explore::explore;
 
 use crate::args::Args;
@@ -38,7 +39,11 @@ fn scan(args: &Args) -> Result<(), anyhow::Error> {
             println!("Writing {}...", path.to_str().unwrap_or_default());
             inscription.write_to_file(&path)?;
         } else {
+            if args.inscription_id().unwrap_or_default() {
+                println!("{}:", inscription.inscription_id().yellow());
+            }
             inscription.print()?;
+            println!("");
         }
     })
 }

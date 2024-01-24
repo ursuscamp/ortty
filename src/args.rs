@@ -111,6 +111,13 @@ impl Args {
             _ => None,
         }
     }
+
+    pub fn inscription_id(&self) -> Option<bool> {
+        match &self.command {
+            Commands::Scan { inscription_id, .. } => Some(*inscription_id),
+            _ => None,
+        }
+    }
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -144,6 +151,10 @@ pub enum Commands {
         /// View the inscription on the web
         #[arg(long)]
         web: bool,
+
+        /// Print inscription ID along with the output
+        #[arg(long)]
+        inscription_id: bool,
     },
 
     /// Explore the blockchain interactively
