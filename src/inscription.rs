@@ -170,6 +170,7 @@ fn extract_inscription(txin: &TxIn) -> Option<(String, Vec<u8>)> {
     let tapscript = txin.witness.tapscript()?;
     let ins: Result<VecDeque<Instruction<'_>>, _> = tapscript.instructions().collect();
     let mut ins = ins.ok()?;
+
     ins.pop_front()?; // sig ignored
     ins.pop_front()?; // OP_CHECKSIG ignored
 
@@ -196,9 +197,15 @@ fn extract_inscription(txin: &TxIn) -> Option<(String, Vec<u8>)> {
     let tag = ins.pop_front()?;
     let mime_type = extract_mime_type(&mut ins, tag).unwrap_or_default();
 
-    // Extract data
-    let tag = ins.pop_front()?;
-    let bytes = extract_data(&mut ins, tag);
+    // Ignore everything else until we find `OP_PUSH 0`
+    while let Some(i) = ins.pop_front() {
+        if i.push_bytes().map(|pb| pb.is_empty()).unwrap_or_default() {
+            break;
+        }
+    }
+
+    // Extract the data
+    let bytes = extract_data(&mut ins);
 
     Some((mime_type, bytes))
 }
@@ -217,14 +224,12 @@ fn extract_mime_type(
     None
 }
 
-fn extract_data(instructions: &mut VecDeque<Instruction<'_>>, tag: Instruction<'_>) -> Vec<u8> {
+fn extract_data(instructions: &mut VecDeque<Instruction<'_>>) -> Vec<u8> {
     let mut data = Vec::new();
-    if tag.script_num() == Some(0) {
-        while let Some(ins) = instructions.pop_front() {
-            match ins {
-                Instruction::PushBytes(pb) => data.extend(pb.as_bytes()),
-                Instruction::Op(_) => break,
-            }
+    while let Some(ins) = instructions.pop_front() {
+        match ins {
+            Instruction::PushBytes(pb) => data.extend(pb.as_bytes()),
+            Instruction::Op(_) => break,
         }
     }
     data
