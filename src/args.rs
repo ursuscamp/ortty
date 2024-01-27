@@ -83,13 +83,6 @@ impl Args {
             Commands::Scan {
                 block,
                 tx: Some(txid),
-                input: Some(input),
-                ..
-            } => ScanMode::Input(*input, *txid, *block),
-            Commands::Scan {
-                block,
-                tx: Some(txid),
-                input: _input,
                 filter,
                 ..
             } => ScanMode::Transaction(*txid, *block, filter.clone()),
@@ -136,10 +129,6 @@ pub enum Commands {
         #[arg(long)]
         tx: Option<Txid>,
 
-        /// Optional input to scan (default to all inputs)
-        #[arg(long)]
-        input: Option<usize>,
-
         /// Filter inscriptions by type [text, json, brc20, image]
         #[arg(long)]
         filter: Vec<Filter>,
@@ -167,5 +156,4 @@ pub enum Commands {
 pub enum ScanMode {
     Block(BlockHash, Vec<Filter>),
     Transaction(Txid, Option<BlockHash>, Vec<Filter>),
-    Input(usize, Txid, Option<BlockHash>),
 }

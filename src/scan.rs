@@ -15,7 +15,6 @@ pub fn scan(args: &Args) -> anyhow::Result<Vec<Arc<Inscription>>> {
         ScanMode::Transaction(txid, block, filter) => {
             scan_transaction(args, &txid, &block, &filter)
         }
-        ScanMode::Input(input, txid, block) => scan_input(args, input, &txid, &block),
     }
 }
 
@@ -29,7 +28,7 @@ fn scan_block(
     let mut inscriptions = Vec::new();
     for tx in &block.txdata {
         for (input, _) in tx.input.iter().enumerate() {
-            if let Some(inscription) = Inscription::extract_witness(tx, input)? {
+            for inscription in Inscription::extract_witness(tx, input)? {
                 // If any filters are specified, check if the inscription matches a filter and add it
                 // If no filters are specified, it automatically matches
                 if !filters.is_empty() {
@@ -53,15 +52,9 @@ fn scan_transaction(
 ) -> anyhow::Result<Vec<Arc<Inscription>>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let tx = rpc.get_raw_transaction(txid, block.as_ref())?;
-    let inscriptions: anyhow::Result<Vec<Option<Arc<Inscription>>>> = tx
-        .input
-        .iter()
-        .enumerate()
-        .map(|(input, _)| Inscription::extract_witness(&tx, input))
-        .collect();
-    let inscriptions: Vec<Arc<Inscription>> = inscriptions?
+    let inscriptions = Inscription::extract_all(&tx)?;
+    let inscriptions: Vec<Arc<Inscription>> = inscriptions
         .into_iter()
-        .flatten()
         .filter(|inscription| {
             // If any filters are specified, check if the inscription matches a filter and add it
             // If no filters are specified, it automatically matches
@@ -73,19 +66,4 @@ fn scan_transaction(
         })
         .collect();
     Ok(inscriptions)
-}
-
-fn scan_input(
-    args: &Args,
-    input: usize,
-    txid: &Txid,
-    blockhash: &Option<BlockHash>,
-) -> anyhow::Result<Vec<Arc<Inscription>>> {
-    let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
-    let tx = rpc.get_raw_transaction(txid, blockhash.as_ref())?;
-    let inscription = Inscription::extract_witness(&tx, input)?;
-    if let Some(inscription) = inscription {
-        return Ok(vec![inscription]);
-    }
-    Ok(vec![])
 }

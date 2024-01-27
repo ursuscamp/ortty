@@ -1,0 +1,4 @@
+[x] Remove --input option for scan, only allow transaction level scanning
+[x] Allow scanning multiple inscriptions per witness
+[x] Add transaction scanning tests
+[ ] Attempt to support recursive content extraction for recursive inscriptions

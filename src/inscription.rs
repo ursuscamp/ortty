@@ -3,7 +3,11 @@ use bitcoincore_rpc::RpcApi;
 use image::{DynamicImage, EncodableLayout, ImageFormat};
 use std::{collections::VecDeque, path::PathBuf, sync::Arc};
 
-use bitcoin::{opcodes::all::OP_IF, script::Instruction, Transaction, TxIn, Txid};
+use bitcoin::{
+    opcodes::all::{OP_ENDIF, OP_IF},
+    script::Instruction,
+    Script, Transaction, TxIn, Txid,
+};
 use colored_json::{to_colored_json, ColorMode};
 
 #[derive(Clone)]
@@ -72,7 +76,7 @@ impl std::fmt::Display for InscriptionId {
 #[derive(Clone)]
 pub struct Inscription {
     pub txid: Txid,
-    pub input: usize,
+    pub index: usize,
     pub mime: String,
     pub data: Vec<u8>,
     pub parsed: ParsedData,
@@ -88,9 +92,7 @@ impl Inscription {
     pub fn extract_all(tx: &Transaction) -> anyhow::Result<Vec<Arc<Inscription>>> {
         let mut inscriptions = Vec::with_capacity(1);
         for (idx, _) in tx.input.iter().enumerate() {
-            if let Some(inscription) = Inscription::extract_witness(tx, idx)? {
-                inscriptions.push(inscription);
-            }
+            inscriptions.extend(Inscription::extract_witness(tx, idx)?);
         }
         Ok(inscriptions)
     }
@@ -98,22 +100,29 @@ impl Inscription {
     pub fn extract_witness(
         tx: &Transaction,
         input: usize,
-    ) -> anyhow::Result<Option<Arc<Inscription>>> {
+    ) -> anyhow::Result<Vec<Arc<Inscription>>> {
         let txin = tx
             .input
             .get(input)
             .ok_or_else(|| anyhow!("Missing input"))?;
-        if let Some((mime, data)) = extract_inscription(txin) {
-            let parsed = parse_data(&data, &mime);
-            return Ok(Some(Arc::new(Inscription {
-                txid: tx.txid(),
-                input,
-                mime,
-                data,
-                parsed,
-            })));
+        if let Some(inscriptions) = extract_inscription(txin) {
+            let arc_ins = inscriptions
+                .into_iter()
+                .enumerate()
+                .map(|(index, (mime, data))| {
+                    let parsed = parse_data(&data, &mime);
+                    Arc::new(Inscription {
+                        txid: tx.txid(),
+                        index,
+                        mime,
+                        data,
+                        parsed,
+                    })
+                })
+                .collect();
+            return Ok(arc_ins);
         }
-        Ok(None)
+        Ok(Vec::new())
     }
 
     pub fn print(&self) -> anyhow::Result<()> {
@@ -162,75 +171,119 @@ impl Inscription {
     }
 
     pub fn inscription_id(&self) -> String {
-        format!("{}i{}", self.txid, self.input)
+        format!("{}i{}", self.txid, self.index)
     }
 }
 
-fn extract_inscription(txin: &TxIn) -> Option<(String, Vec<u8>)> {
+fn extract_inscription(txin: &TxIn) -> Option<Vec<(String, Vec<u8>)>> {
     let tapscript = txin.witness.tapscript()?;
-    let ins: Result<VecDeque<Instruction<'_>>, _> = tapscript.instructions().collect();
-    let mut ins = ins.ok()?;
+    let inscriptions = extract_script(tapscript);
+    Some(inscriptions)
+}
 
-    ins.pop_front()?; // sig ignored
-    ins.pop_front()?; // OP_CHECKSIG ignored
-
-    // Check for OP_0
-    let zero_len = ins.pop_front()?.push_bytes()?.len();
-    if zero_len > 0 {
-        return None;
+fn extract_script(script: &Script) -> Vec<(String, Vec<u8>)> {
+    let instructions: Result<VecDeque<_>, _> = script.instructions().collect();
+    let mut inscriptions = Vec::new();
+    if instructions.is_err() {
+        return inscriptions;
     }
+    let mut instructions = instructions.unwrap();
 
-    // Check OP_IF
-    let opif = ins.pop_front()?.opcode()?;
-    if opif != OP_IF {
-        return None;
-    }
+    while !instructions.is_empty() {
+        if extract_op0(&mut instructions).is_none() {
+            continue;
+        }
 
-    // Check "ord"
-    let ord = ins.pop_front()?;
-    let ord = ord.push_bytes()?;
-    if ord.as_bytes() != "ord".as_bytes() {
-        return None;
-    }
+        if extract_opif(&mut instructions).is_none() {
+            continue;
+        }
 
-    // Check for file type or inscription
-    let tag = ins.pop_front()?;
-    let mime_type = extract_mime_type(&mut ins, tag).unwrap_or_default();
+        if extract_ord(&mut instructions).is_none() {
+            continue;
+        }
 
-    // Ignore everything else until we find `OP_PUSH 0`
-    while let Some(i) = ins.pop_front() {
-        if i.push_bytes().map(|pb| pb.is_empty()).unwrap_or_default() {
-            break;
+        if extract_push1(&mut instructions).is_none() {
+            continue;
+        }
+
+        if let Some(media_type) = extract_media_type(&mut instructions) {
+            if extract_until_op0(&mut instructions).is_none() {
+                continue;
+            }
+            let data = extract_data(&mut instructions);
+
+            if extract_opendif(&mut instructions).is_none() {
+                continue;
+            }
+
+            inscriptions.push((media_type, data));
         }
     }
 
-    // Extract the data
-    let bytes = extract_data(&mut ins);
-
-    Some((mime_type, bytes))
+    inscriptions
 }
 
-fn extract_mime_type(
-    instructions: &mut VecDeque<Instruction<'_>>,
-    tag: Instruction<'_>,
-) -> Option<String> {
-    if tag.script_num() == Some(1) {
-        return Some(
-            std::str::from_utf8(instructions.pop_front()?.push_bytes()?.as_bytes())
-                .ok()?
-                .into(),
-        );
+fn extract_op0(script: &mut VecDeque<Instruction<'_>>) -> Option<()> {
+    if script.pop_front()?.push_bytes()?.is_empty() {
+        return Some(());
+    }
+    None
+}
+
+fn extract_opif(script: &mut VecDeque<Instruction<'_>>) -> Option<()> {
+    if script.pop_front()?.opcode()? == OP_IF {
+        return Some(());
+    }
+    None
+}
+
+fn extract_ord(script: &mut VecDeque<Instruction<'_>>) -> Option<()> {
+    if script.pop_front()?.push_bytes()?.as_bytes() == b"ord" {
+        return Some(());
+    }
+    None
+}
+
+fn extract_push1(script: &mut VecDeque<Instruction<'_>>) -> Option<()> {
+    if script.pop_front()?.push_bytes()?.as_bytes() == [1] {
+        return Some(());
+    }
+    None
+}
+
+fn extract_until_op0(script: &mut VecDeque<Instruction<'_>>) -> Option<()> {
+    while !script.is_empty() {
+        if script.pop_front()?.push_bytes()?.is_empty() {
+            return Some(());
+        }
+    }
+    None
+}
+
+fn extract_media_type(script: &mut VecDeque<Instruction<'_>>) -> Option<String> {
+    script
+        .pop_front()?
+        .push_bytes()
+        .and_then(|b| std::str::from_utf8(b.as_bytes()).ok())
+        .map(Into::into)
+}
+
+fn extract_opendif(script: &mut VecDeque<Instruction<'_>>) -> Option<()> {
+    if script.get(0)?.opcode()? == OP_ENDIF {
+        script.pop_front();
+        return Some(());
     }
     None
 }
 
 fn extract_data(instructions: &mut VecDeque<Instruction<'_>>) -> Vec<u8> {
     let mut data = Vec::new();
-    while let Some(ins) = instructions.pop_front() {
+    while let Some(ins) = instructions.get(0) {
         match ins {
             Instruction::PushBytes(pb) => data.extend(pb.as_bytes()),
             Instruction::Op(_) => break,
         }
+        instructions.pop_front();
     }
     data
 }
@@ -276,10 +329,87 @@ pub(crate) fn fetch_and_print(
 ) -> anyhow::Result<()> {
     let client = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
     let tx = client.get_raw_transaction(&inscription_id.0, None)?;
-    let inscription = Inscription::extract_witness(&tx, inscription_id.1)?
-        .ok_or_else(|| anyhow!("Inscription not found"))?;
-    inscription.print()?;
+    let inscriptions = Inscription::extract_witness(&tx, inscription_id.1)
+        .map_err(|_| anyhow!("Inscription not found"))?;
+    for inscription in inscriptions {
+        inscription.print()?;
+    }
+    // inscription.print()?;
     println!();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bitcoin::opcodes::{all::OP_CHECKSIG, OP_FALSE};
+
+    use super::*;
+
+    #[test]
+    fn test_normal_inscription() {
+        let script = bitcoin::script::Builder::new()
+            .push_opcode(OP_FALSE)
+            .push_opcode(OP_IF)
+            .push_slice(b"ord")
+            .push_slice([1])
+            .push_slice(b"text/plain")
+            .push_slice([])
+            .push_slice(b"hello world")
+            .push_opcode(OP_ENDIF)
+            .into_script();
+        let results = extract_script(&script);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results, [("text/plain".into(), b"hello world".to_vec())]);
+    }
+
+    #[test]
+    fn test_ignore_preceding() {
+        let script = bitcoin::script::Builder::new()
+            .push_opcode(OP_CHECKSIG)
+            .push_opcode(OP_FALSE)
+            .push_opcode(OP_IF)
+            .push_slice(b"ord")
+            .push_slice([1])
+            .push_slice(b"text/plain")
+            .push_slice([])
+            .push_slice(b"hello world")
+            .push_opcode(OP_ENDIF)
+            .into_script();
+        let results = extract_script(&script);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results, [("text/plain".into(), b"hello world".to_vec())]);
+    }
+
+    #[test]
+    fn test_multiple_inscriptions_per_witness() {
+        let script = bitcoin::script::Builder::new()
+            .push_opcode(OP_CHECKSIG)
+            .push_opcode(OP_FALSE)
+            .push_opcode(OP_IF)
+            .push_slice(b"ord")
+            .push_slice([1])
+            .push_slice(b"text/plain")
+            .push_slice([])
+            .push_slice(b"hello world")
+            .push_opcode(OP_ENDIF)
+            .push_opcode(OP_FALSE)
+            .push_opcode(OP_IF)
+            .push_slice(b"ord")
+            .push_slice([1])
+            .push_slice(b"text/plain")
+            .push_slice([])
+            .push_slice(b"goodbye world")
+            .push_opcode(OP_ENDIF)
+            .into_script();
+        let results = extract_script(&script);
+        assert_eq!(results.len(), 2);
+        assert_eq!(
+            results,
+            [
+                ("text/plain".into(), b"hello world".to_vec()),
+                ("text/plain".into(), b"goodbye world".to_vec())
+            ]
+        );
+    }
 }
