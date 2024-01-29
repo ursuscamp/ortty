@@ -11,16 +11,16 @@ mod inscription;
 mod scan;
 
 fn main() -> anyhow::Result<()> {
-    dotenv::dotenv()?;
+    dotenv::dotenv().ok();
 
     let args = Args::parse();
 
     match args.command {
         args::Commands::Scan { .. } => scan(&args)?,
         args::Commands::Explore => explore(&args)?,
-        args::Commands::Inscription { ref inscription_id } => {
-            inscription::fetch_and_print(&args, inscription_id)?
-        }
+        args::Commands::Inscription {
+            ref inscription_id, ..
+        } => inscription::fetch_and_print(&args, inscription_id)?,
     }
     Ok(())
 }
@@ -45,7 +45,7 @@ fn scan(args: &Args) -> Result<(), anyhow::Error> {
             if args.inscription_id().unwrap_or_default() {
                 println!("{}:", inscription.inscription_id().yellow());
             }
-            inscription.print()?;
+            inscription.print(args.raw())?;
             println!();
         }
     }

@@ -276,7 +276,7 @@ fn print_inscription(state: &mut State, inscription: Arc<Inscription>) -> anyhow
     }
 
     if state.extra_opts.render {
-        inscription.print()?;
+        inscription.print(false)?;
     }
 
     println!();

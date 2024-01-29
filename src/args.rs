@@ -1,8 +1,9 @@
-use std::path::PathBuf;
+use std::{io::stdout, path::PathBuf};
 
 use anyhow::{anyhow, bail};
 use bitcoin::{BlockHash, Txid};
 use bitcoincore_rpc::Auth;
+use crossterm::tty::IsTty;
 use directories::BaseDirs;
 
 use crate::{filter::Filter, inscription::InscriptionId};
@@ -111,6 +112,19 @@ impl Args {
             _ => None,
         }
     }
+
+    pub fn raw(&self) -> bool {
+        // If it's not a TTY, then never print colored text
+        if !stdout().is_tty() {
+            return true;
+        }
+
+        match &self.command {
+            Commands::Scan { raw, .. } => *raw,
+            Commands::Inscription { raw, .. } => *raw,
+            _ => false,
+        }
+    }
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -144,13 +158,23 @@ pub enum Commands {
         /// Print inscription ID along with the output
         #[arg(long)]
         inscription_id: bool,
+
+        /// Prints JSON as unformatted plain text
+        #[arg(long)]
+        raw: bool,
     },
 
     /// Explore the blockchain interactively
     Explore,
 
     /// View a single inscription by inscription id. Requires node with txindex=1
-    Inscription { inscription_id: InscriptionId },
+    Inscription {
+        inscription_id: InscriptionId,
+
+        /// Prints JSON as unformatted plain text
+        #[arg(long)]
+        raw: bool,
+    },
 }
 
 pub enum ScanMode {

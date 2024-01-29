@@ -125,12 +125,12 @@ impl Inscription {
         Ok(Vec::new())
     }
 
-    pub fn print(&self) -> anyhow::Result<()> {
+    pub fn print(&self, raw_json: bool) -> anyhow::Result<()> {
         match &self.parsed {
             ParsedData::Binary => println!("{}", hex::encode(self.data.as_bytes())),
             ParsedData::Html(text) | ParsedData::Text(text) => println!("{text}"),
             ParsedData::Image(image) => print_image(image)?,
-            ParsedData::Json(value) => print_json(value)?,
+            ParsedData::Json(value) => print_json(value, raw_json)?,
         }
 
         Ok(())
@@ -317,8 +317,12 @@ fn print_image(image: &DynamicImage) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_json(value: &serde_json::Value) -> anyhow::Result<()> {
-    let formatted = to_colored_json(value, ColorMode::On)?;
+fn print_json(value: &serde_json::Value, raw_json: bool) -> anyhow::Result<()> {
+    let formatted = if raw_json {
+        serde_json::to_string(value)?
+    } else {
+        to_colored_json(value, ColorMode::On)?
+    };
     println!("{formatted}");
     Ok(())
 }
@@ -332,9 +336,8 @@ pub(crate) fn fetch_and_print(
     let inscriptions = Inscription::extract_witness(&tx, inscription_id.1)
         .map_err(|_| anyhow!("Inscription not found"))?;
     for inscription in inscriptions {
-        inscription.print()?;
+        inscription.print(args.raw())?;
     }
-    // inscription.print()?;
     println!();
 
     Ok(())
