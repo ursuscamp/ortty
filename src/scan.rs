@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use bitcoin::{BlockHash, Txid};
-use bitcoincore_rpc::RpcApi;
+use bitcoincore_rpc::{Client, RpcApi};
 
 use crate::{
-    args::{Args, ScanMode},
+    args::{Args, BlockInd, ScanMode},
     filter::Filter,
     inscription::Inscription,
 };
@@ -20,11 +20,12 @@ pub fn scan(args: &Args) -> anyhow::Result<Vec<Arc<Inscription>>> {
 
 fn scan_block(
     args: &Args,
-    block: &BlockHash,
+    block: &BlockInd,
     filters: &[Filter],
 ) -> anyhow::Result<Vec<Arc<Inscription>>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
-    let block = rpc.get_block(block)?;
+    let bh = get_block_from_ind(&rpc, block)?;
+    let block = rpc.get_block(&bh)?;
     let mut inscriptions = Vec::new();
     for tx in &block.txdata {
         for (input, _) in tx.input.iter().enumerate() {
@@ -47,11 +48,12 @@ fn scan_block(
 fn scan_transaction(
     args: &Args,
     txid: &Txid,
-    block: &Option<BlockHash>,
+    block: &Option<BlockInd>,
     filters: &[Filter],
 ) -> anyhow::Result<Vec<Arc<Inscription>>> {
     let rpc = bitcoincore_rpc::Client::new(&args.rpc_host(), args.rpc_auth()?)?;
-    let tx = rpc.get_raw_transaction(txid, block.as_ref())?;
+    let bh = block.map(|bh| get_block_from_ind(&rpc, &bh).ok()).flatten();
+    let tx = rpc.get_raw_transaction(txid, bh.as_ref())?;
     let inscriptions = Inscription::extract_all(&tx)?;
     let inscriptions: Vec<Arc<Inscription>> = inscriptions
         .into_iter()
@@ -66,4 +68,11 @@ fn scan_transaction(
         })
         .collect();
     Ok(inscriptions)
+}
+
+fn get_block_from_ind(client: &Client, blockind: &BlockInd) -> anyhow::Result<BlockHash> {
+    Ok(match blockind {
+        BlockInd::BlockHash(bh) => *bh,
+        BlockInd::BlockHeight(bh) => client.get_block_hash(*bh)?,
+    })
 }

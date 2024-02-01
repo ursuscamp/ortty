@@ -1,4 +1,4 @@
-use std::{io::stdout, path::PathBuf};
+use std::{io::stdout, path::PathBuf, str::FromStr};
 
 use anyhow::{anyhow, bail};
 use bitcoin::{BlockHash, Txid};
@@ -130,14 +130,14 @@ impl Args {
 #[derive(clap::Subcommand, Debug)]
 pub enum Commands {
     /// Scan a block and/or tx in order to view the embedded inscriptions. Specifying only a
-    /// blockhash will scan the entire block. Specifying a blockhash and a txid will scan that tx.
+    /// blockhash or block height will scan the entire block. Specifying a blockhash and a txid will scan that tx.
     /// Optionally, an input can be specified to extract only that input.
     ///
     /// When connected to a node with `txindex=1` specified, blockhash is not required.
     Scan {
-        /// Blockhash of transaction
+        /// Blockhash or block height of transaction
         #[arg(long)]
-        block: Option<BlockHash>,
+        block: Option<BlockInd>,
 
         /// Txid to scan
         #[arg(long)]
@@ -178,6 +178,50 @@ pub enum Commands {
 }
 
 pub enum ScanMode {
-    Block(BlockHash, Vec<Filter>),
-    Transaction(Txid, Option<BlockHash>, Vec<Filter>),
+    Block(BlockInd, Vec<Filter>),
+    Transaction(Txid, Option<BlockInd>, Vec<Filter>),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BlockInd {
+    BlockHash(BlockHash),
+    BlockHeight(u64),
+}
+
+impl FromStr for BlockInd {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(bh) = BlockHash::from_str(s) {
+            return Ok(Self::BlockHash(bh));
+        }
+
+        if let Ok(bh) = u64::from_str(s) {
+            return Ok(Self::BlockHeight(bh));
+        }
+
+        Err(anyhow!("Failed to parse blockhash/blockheight"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_blockind() {
+        let hash = "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054";
+        let height = "800000";
+        let nothing = "hello world";
+
+        assert!(matches!(
+            BlockInd::from_str(hash),
+            Ok(BlockInd::BlockHash(_))
+        ));
+        assert!(matches!(
+            BlockInd::from_str(height),
+            Ok(BlockInd::BlockHeight(800_000))
+        ));
+        assert!(matches!(BlockInd::from_str(nothing), Err(_)));
+    }
 }
